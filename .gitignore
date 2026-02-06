@@ -27,3 +27,18 @@ coordination/orchestration/*
 claude-flow
 # Removed Windows wrapper files per user request
 hive-mind-prompt-*.txt
+
+# Mobile app
+mobile/node_modules/
+mobile/.expo/
+mobile/dist/
+mobile/ios/
+mobile/android/
+
+# Server
+server/node_modules/
+server/dist/
+.env
+
+# Claude Code tooling (per-developer config)
+.claude/
