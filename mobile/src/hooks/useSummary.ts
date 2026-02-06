@@ -3,6 +3,7 @@ import {
   fetchSummaries,
   fetchSummary,
   generateSummary,
+  deleteSummary,
 } from '@/src/services/summaryService';
 
 export function useSummaries() {
@@ -25,6 +26,17 @@ export function useGenerateSummary() {
 
   return useMutation({
     mutationFn: (videoId: string) => generateSummary(videoId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['summaries'] });
+    },
+  });
+}
+
+export function useDeleteSummary() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (id: string) => deleteSummary(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['summaries'] });
     },

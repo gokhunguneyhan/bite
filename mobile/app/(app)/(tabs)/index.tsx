@@ -16,6 +16,7 @@ import { Colors } from '@/src/constants/colors';
 import { extractVideoId } from '@/src/services/youtube';
 import { useSummaries, useGenerateSummary } from '@/src/hooks/useSummary';
 import { SummaryCard } from '@/src/components/summary/SummaryCard';
+import { SummarizeProgress } from '@/src/components/summary/SummarizeProgress';
 
 export default function HomeScreen() {
   const [url, setUrl] = useState('');
@@ -73,22 +74,19 @@ export default function HomeScreen() {
                 onSubmitEditing={handleSummarize}
                 editable={!isGenerating}
               />
-              <Pressable
-                style={[
-                  styles.button,
-                  (!url.trim() || isGenerating) && styles.buttonDisabled,
-                ]}
-                onPress={handleSummarize}
-                disabled={!url.trim() || isGenerating}>
-                {isGenerating ? (
-                  <View style={styles.loadingRow}>
-                    <ActivityIndicator color="#fff" size="small" />
-                    <Text style={styles.buttonText}>Generating...</Text>
-                  </View>
-                ) : (
+              {isGenerating ? (
+                <SummarizeProgress />
+              ) : (
+                <Pressable
+                  style={[
+                    styles.button,
+                    !url.trim() && styles.buttonDisabled,
+                  ]}
+                  onPress={handleSummarize}
+                  disabled={!url.trim()}>
                   <Text style={styles.buttonText}>Summarize</Text>
-                )}
-              </Pressable>
+                </Pressable>
+              )}
             </View>
 
             {summaries && summaries.length > 0 && (
@@ -160,11 +158,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 17,
     fontWeight: '600',
-  },
-  loadingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
   },
   sectionTitle: {
     fontSize: 18,

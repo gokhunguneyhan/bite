@@ -1,17 +1,26 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Summary } from '@/src/types/summary';
 import { apiRequest, ApiError } from './api';
 
-// In-memory cache of summaries for the session
-let cachedSummaries: Summary[] = [];
+const STORAGE_KEY = '@yt_summarise_summaries';
+
+async function loadSummaries(): Promise<Summary[]> {
+  const raw = await AsyncStorage.getItem(STORAGE_KEY);
+  return raw ? JSON.parse(raw) : [];
+}
+
+async function saveSummaries(summaries: Summary[]): Promise<void> {
+  await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(summaries));
+}
 
 export async function fetchSummaries(): Promise<Summary[]> {
-  // TODO: Replace with API call when user accounts exist
-  return cachedSummaries;
+  return loadSummaries();
 }
 
 export async function fetchSummary(id: string): Promise<Summary> {
-  const cached = cachedSummaries.find((s) => s.id === id);
-  if (cached) return cached;
+  const summaries = await loadSummaries();
+  const found = summaries.find((s) => s.id === id);
+  if (found) return found;
   throw new Error('Summary not found');
 }
 
@@ -22,8 +31,8 @@ export async function generateSummary(videoId: string): Promise<Summary> {
       body: { videoId },
     });
 
-    // Cache the result
-    cachedSummaries = [summary, ...cachedSummaries];
+    const existing = await loadSummaries();
+    await saveSummaries([summary, ...existing]);
     return summary;
   } catch (error) {
     if (error instanceof ApiError) {
@@ -37,4 +46,9 @@ export async function generateSummary(videoId: string): Promise<Summary> {
       'Could not connect to server. Make sure the backend is running.',
     );
   }
+}
+
+export async function deleteSummary(id: string): Promise<void> {
+  const summaries = await loadSummaries();
+  await saveSummaries(summaries.filter((s) => s.id !== id));
 }
