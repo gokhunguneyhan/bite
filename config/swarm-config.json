@@ -1,0 +1,207 @@
+{
+  "swarm": {
+    "topology": "mesh",
+    "maxAgents": 6,
+    "autoScaling": true,
+    "coordinationMode": "collaborative",
+    "memoryEnabled": true,
+    "hooksEnabled": true
+  },
+  "agents": {
+    "core": [
+      {
+        "type": "researcher",
+        "capabilities": ["analysis", "documentation", "pattern-recognition"],
+        "priority": "high",
+        "autoSpawn": true
+      },
+      {
+        "type": "coder",
+        "capabilities": ["implementation", "refactoring", "optimization"],
+        "priority": "high",
+        "autoSpawn": true
+      },
+      {
+        "type": "tester",
+        "capabilities": ["testing", "validation", "quality-assurance"],
+        "priority": "high",
+        "autoSpawn": true
+      },
+      {
+        "type": "planner",
+        "capabilities": ["planning", "task-breakdown", "estimation"],
+        "priority": "medium",
+        "autoSpawn": true
+      },
+      {
+        "type": "reviewer",
+        "capabilities": ["code-review", "security-audit", "best-practices"],
+        "priority": "medium",
+        "autoSpawn": true
+      }
+    ],
+    "specialized": [
+      {
+        "type": "backend-dev",
+        "capabilities": ["api-development", "database", "server-logic"],
+        "priority": "medium",
+        "autoSpawn": false
+      },
+      {
+        "type": "system-architect",
+        "capabilities": ["architecture", "design-patterns", "scalability"],
+        "priority": "medium",
+        "autoSpawn": false
+      },
+      {
+        "type": "cicd-engineer",
+        "capabilities": ["deployment", "automation", "infrastructure"],
+        "priority": "low",
+        "autoSpawn": false
+      }
+    ]
+  },
+  "coordination": {
+    "memoryNamespace": "swarm",
+    "sessionPrefix": "session",
+    "taskPrefix": "task",
+    "sharedMemoryEnabled": true,
+    "crossAgentCommunication": true,
+    "consensusRequired": false
+  },
+  "performance": {
+    "parallelExecution": true,
+    "maxConcurrentTasks": 10,
+    "taskTimeout": 300000,
+    "memoryRetention": 3600000,
+    "cacheEnabled": true
+  },
+  "hooks": {
+    "preTask": {
+      "enabled": true,
+      "autoRestore": true,
+      "validateContext": true
+    },
+    "postTask": {
+      "enabled": true,
+      "exportMetrics": true,
+      "persistState": true
+    },
+    "preEdit": {
+      "enabled": true,
+      "assignAgent": true,
+      "validateFile": true
+    },
+    "postEdit": {
+      "enabled": true,
+      "formatCode": true,
+      "updateMemory": true,
+      "trainPatterns": true
+    },
+    "sessionStart": {
+      "enabled": true,
+      "loadContext": true,
+      "initializeAgents": true
+    },
+    "sessionEnd": {
+      "enabled": true,
+      "exportSummary": true,
+      "saveState": true
+    }
+  },
+  "memory": {
+    "provider": "local",
+    "maxSize": 104857600,
+    "compressionEnabled": true,
+    "encryptionEnabled": false,
+    "ttl": 86400000,
+    "namespaces": {
+      "coordination": {
+        "description": "Agent coordination and communication",
+        "priority": "high"
+      },
+      "context": {
+        "description": "Task and session context",
+        "priority": "high"
+      },
+      "patterns": {
+        "description": "Neural patterns and learning data",
+        "priority": "medium"
+      },
+      "metrics": {
+        "description": "Performance and usage metrics",
+        "priority": "low"
+      }
+    }
+  },
+  "neural": {
+    "enabled": true,
+    "autoTrain": true,
+    "models": [
+      "code-patterns",
+      "task-routing",
+      "performance-prediction",
+      "error-detection"
+    ],
+    "trainingInterval": 3600000,
+    "minDataPoints": 100
+  },
+  "github": {
+    "enabled": false,
+    "autoSync": false,
+    "webhooksEnabled": false,
+    "defaultBranch": "main",
+    "requireReview": true
+  },
+  "logging": {
+    "level": "info",
+    "format": "json",
+    "outputPath": "./logs",
+    "maxFileSize": 10485760,
+    "maxFiles": 10,
+    "consoleOutput": true
+  },
+  "security": {
+    "validateCommands": true,
+    "sanitizeInputs": true,
+    "allowedPaths": ["./src", "./tests", "./docs", "./config", "./scripts"],
+    "blockedCommands": ["rm -rf /", "sudo", "chmod 777"],
+    "rateLimiting": {
+      "enabled": true,
+      "maxRequestsPerMinute": 100
+    }
+  },
+  "sparc": {
+    "enabled": true,
+    "modes": [
+      "specification",
+      "pseudocode",
+      "architecture",
+      "refinement",
+      "completion"
+    ],
+    "tddWorkflow": {
+      "enabled": true,
+      "coverageThreshold": 80,
+      "requireTests": true
+    },
+    "batchtools": {
+      "enabled": true,
+      "maxParallelModes": 5
+    }
+  },
+  "fileOrganization": {
+    "enforceStructure": true,
+    "directories": {
+      "source": "./src",
+      "tests": "./tests",
+      "docs": "./docs",
+      "config": "./config",
+      "scripts": "./scripts",
+      "examples": "./examples",
+      "logs": "./logs"
+    },
+    "preventRootFiles": true,
+    "autoCreateDirs": true
+  }
+}
