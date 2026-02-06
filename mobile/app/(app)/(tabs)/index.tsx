@@ -42,8 +42,8 @@ export default function HomeScreen() {
         setUrl('');
         router.push(`/summary/${summary.id}`);
       },
-      onError: () => {
-        Alert.alert('Error', 'Failed to generate summary. Please try again.');
+      onError: (error: Error) => {
+        Alert.alert('Error', error.message);
       },
     });
   };
