@@ -4,17 +4,19 @@ import {
   TextInput,
   Pressable,
   FlatList,
+  Image,
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { router } from 'expo-router';
 import { Colors } from '@/src/constants/colors';
 import { extractVideoId } from '@/src/services/youtube';
 import { useSummaries, useGenerateSummary } from '@/src/hooks/useSummary';
+import { useVideoPreview } from '@/src/hooks/useVideoPreview';
 import { SummaryCard } from '@/src/components/summary/SummaryCard';
 import { SummarizeProgress } from '@/src/components/summary/SummarizeProgress';
 
@@ -22,6 +24,8 @@ export default function HomeScreen() {
   const [url, setUrl] = useState('');
   const { data: summaries, isLoading } = useSummaries();
   const generateMutation = useGenerateSummary();
+  const videoId = useMemo(() => extractVideoId(url.trim()), [url]);
+  const { data: preview } = useVideoPreview(videoId);
 
   const handleSummarize = () => {
     const videoId = extractVideoId(url.trim());
@@ -74,6 +78,23 @@ export default function HomeScreen() {
                 onSubmitEditing={handleSummarize}
                 editable={!isGenerating}
               />
+              {preview && !isGenerating && (
+                <View style={styles.preview}>
+                  <Image
+                    source={{ uri: preview.thumbnailUrl }}
+                    style={styles.previewThumb}
+                    resizeMode="cover"
+                  />
+                  <View style={styles.previewInfo}>
+                    <Text style={styles.previewTitle} numberOfLines={2}>
+                      {preview.title}
+                    </Text>
+                    <Text style={styles.previewChannel}>
+                      {preview.channelName}
+                    </Text>
+                  </View>
+                </View>
+              )}
               {isGenerating ? (
                 <SummarizeProgress />
               ) : (
@@ -158,6 +179,33 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 17,
     fontWeight: '600',
+  },
+  preview: {
+    flexDirection: 'row',
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  previewThumb: {
+    width: 100,
+    height: 70,
+    backgroundColor: Colors.border,
+  },
+  previewInfo: {
+    flex: 1,
+    padding: 10,
+    justifyContent: 'center',
+  },
+  previewTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.text,
+    lineHeight: 18,
+  },
+  previewChannel: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    marginTop: 3,
   },
   sectionTitle: {
     fontSize: 18,
