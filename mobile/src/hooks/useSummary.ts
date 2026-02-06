@@ -4,7 +4,9 @@ import {
   fetchSummary,
   generateSummary,
   deleteSummary,
+  fetchSummariesByChannel,
 } from '@/src/services/summaryService';
+import { useSettingsStore } from '@/src/stores/settingsStore';
 
 export function useSummaries() {
   return useQuery({
@@ -23,12 +25,21 @@ export function useSummary(id: string) {
 
 export function useGenerateSummary() {
   const queryClient = useQueryClient();
+  const language = useSettingsStore((s) => s.language);
 
   return useMutation({
-    mutationFn: (videoId: string) => generateSummary(videoId),
+    mutationFn: (videoId: string) => generateSummary(videoId, language),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['summaries'] });
     },
+  });
+}
+
+export function useChannelSummaries(channelName: string) {
+  return useQuery({
+    queryKey: ['channelSummaries', channelName],
+    queryFn: () => fetchSummariesByChannel(channelName),
+    enabled: !!channelName,
   });
 }
 

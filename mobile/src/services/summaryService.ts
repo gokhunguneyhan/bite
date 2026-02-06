@@ -24,11 +24,11 @@ export async function fetchSummary(id: string): Promise<Summary> {
   throw new Error('Summary not found');
 }
 
-export async function generateSummary(videoId: string): Promise<Summary> {
+export async function generateSummary(videoId: string, language: string = 'en'): Promise<Summary> {
   try {
     const summary = await apiRequest<Summary>('/api/summarize', {
       method: 'POST',
-      body: { videoId },
+      body: { videoId, language },
     });
 
     const existing = await loadSummaries();
@@ -51,4 +51,9 @@ export async function generateSummary(videoId: string): Promise<Summary> {
 export async function deleteSummary(id: string): Promise<void> {
   const summaries = await loadSummaries();
   await saveSummaries(summaries.filter((s) => s.id !== id));
+}
+
+export async function fetchSummariesByChannel(channelName: string): Promise<Summary[]> {
+  const summaries = await loadSummaries();
+  return summaries.filter((s) => s.channelName === channelName);
 }

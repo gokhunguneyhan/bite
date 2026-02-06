@@ -9,9 +9,25 @@ export interface Summary {
   refresherCards: RefresherCard[];
   actionableInsights: string[];
   affiliateLinks: AffiliateLink[];
+  category: string;
   createdAt: string;
   language: string;
 }
+
+export const CATEGORIES = [
+  'Tech',
+  'Business',
+  'Science',
+  'Self-improvement',
+  'Health',
+  'Finance',
+  'Education',
+  'Entertainment',
+  'Productivity',
+  'Other',
+] as const;
+
+export type Category = (typeof CATEGORIES)[number];
 
 export interface ContextualSection {
   title: string;

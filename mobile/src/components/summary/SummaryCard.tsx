@@ -23,9 +23,14 @@ export function SummaryCard({ summary }: SummaryCardProps) {
         <Text style={styles.title} numberOfLines={2}>
           {summary.videoTitle}
         </Text>
-        <Text style={styles.meta}>
-          {summary.channelName} · {timeAgo}
-        </Text>
+        <View style={styles.metaRow}>
+          <Text style={styles.meta} numberOfLines={1}>
+            {summary.channelName} · {timeAgo}
+          </Text>
+          {summary.category && summary.category !== 'Other' && (
+            <Text style={styles.categoryBadge}>{summary.category}</Text>
+          )}
+        </View>
       </View>
     </Pressable>
   );
@@ -70,9 +75,25 @@ const styles = StyleSheet.create({
     color: Colors.text,
     lineHeight: 20,
   },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+    gap: 6,
+  },
   meta: {
     fontSize: 13,
     color: Colors.textSecondary,
-    marginTop: 4,
+    flexShrink: 1,
+  },
+  categoryBadge: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: Colors.primary,
+    backgroundColor: Colors.primary + '15',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    overflow: 'hidden',
   },
 });

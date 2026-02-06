@@ -51,10 +51,20 @@ export default function SummaryScreen() {
 
       <View style={styles.videoMeta}>
         <Text style={styles.videoTitle}>{summary.videoTitle}</Text>
-        <Pressable
-          onPress={() => router.push(`/creator/${summary.videoId}`)}>
-          <Text style={styles.channelName}>{summary.channelName}</Text>
-        </Pressable>
+        <View style={styles.metaRow}>
+          <Pressable
+            onPress={() =>
+              router.push({
+                pathname: '/creator/[id]',
+                params: { id: summary.channelName },
+              })
+            }>
+            <Text style={styles.channelName}>{summary.channelName}</Text>
+          </Pressable>
+          {summary.category && summary.category !== 'Other' && (
+            <Text style={styles.categoryTag}>{summary.category}</Text>
+          )}
+        </View>
       </View>
 
       {/* Quick Summary */}
@@ -186,11 +196,26 @@ const styles = StyleSheet.create({
     color: Colors.text,
     lineHeight: 28,
   },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+    gap: 10,
+  },
   channelName: {
     fontSize: 15,
     color: Colors.primary,
-    marginTop: 6,
     fontWeight: '500',
+  },
+  categoryTag: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.primary,
+    backgroundColor: Colors.primary + '15',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    overflow: 'hidden',
   },
   section: {
     paddingHorizontal: 20,

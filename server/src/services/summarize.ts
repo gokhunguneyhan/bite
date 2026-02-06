@@ -21,12 +21,19 @@ interface SummaryResult {
     url: string;
     type: 'book' | 'resource';
   }[];
+  category: string;
 }
 
 export async function generateSummary(
   transcript: string,
   videoTitle: string,
+  language: string = 'en',
 ): Promise<SummaryResult> {
+  const languageInstruction =
+    language !== 'en'
+      ? `\n\nIMPORTANT: Write ALL text content (summaries, sections, cards, insights) in ${language}. Only keep JSON keys in English.`
+      : '';
+
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-4-5-20250929',
     max_tokens: 4096,
@@ -67,7 +74,8 @@ Return a JSON object with exactly this structure (no markdown, just raw JSON):
       "url": "https://www.amazon.com/s?k=BOOK+TITLE",
       "type": "book"
     }
-  ]
+  ],
+  "category": "One of: Tech, Business, Science, Self-improvement, Health, Finance, Education, Entertainment, Productivity, Other"
 }
 
 Guidelines:
@@ -77,7 +85,8 @@ Guidelines:
 - Only include affiliate links for books/resources explicitly mentioned in the video. If none are mentioned, return an empty array.
 - Estimate timestamps based on position in transcript (divide transcript length proportionally)
 - For contextual sections, preserve the speaker's reasoning and stories, don't just list facts
-- Keep refresher card questions clear and specific, answers concise but complete`,
+- Keep refresher card questions clear and specific, answers concise but complete
+- Assign exactly one category from the list above that best fits the video${languageInstruction}`,
       },
     ],
   });

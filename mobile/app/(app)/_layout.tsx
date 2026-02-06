@@ -33,7 +33,7 @@ export default function AppLayout() {
       />
       <Stack.Screen
         name="creator/[id]"
-        options={{ title: 'Creator', headerBackTitle: 'Back' }}
+        options={{ title: 'Creator Profile', headerBackTitle: 'Back' }}
       />
     </Stack>
   );

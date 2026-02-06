@@ -17,12 +17,14 @@ app.get('/health', (_req, res) => {
 
 // Generate summary for a YouTube video
 app.post('/api/summarize', async (req, res) => {
-  const { videoId } = req.body;
+  const { videoId, language } = req.body;
 
   if (!videoId || typeof videoId !== 'string') {
     res.status(400).json({ error: 'videoId is required' });
     return;
   }
+
+  const outputLanguage = typeof language === 'string' ? language : 'en';
 
   try {
     console.log(`[summarize] Starting for video: ${videoId}`);
@@ -38,7 +40,7 @@ app.post('/api/summarize', async (req, res) => {
     );
 
     // Generate summary with Claude
-    const summary = await generateSummary(transcript, metadata.title);
+    const summary = await generateSummary(transcript, metadata.title, outputLanguage);
 
     console.log(`[summarize] Summary generated for "${metadata.title}"`);
 
@@ -56,8 +58,9 @@ app.post('/api/summarize', async (req, res) => {
       })),
       actionableInsights: summary.actionableInsights,
       affiliateLinks: summary.affiliateLinks,
+      category: summary.category || 'Other',
       createdAt: new Date().toISOString(),
-      language: 'en',
+      language: outputLanguage,
     });
   } catch (error) {
     const message =
