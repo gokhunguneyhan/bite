@@ -9,11 +9,13 @@ import {
 import { useState, useMemo } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/src/constants/colors';
-import { useSummaries } from '@/src/hooks/useSummary';
+import { useSummaries, useDeleteSummary } from '@/src/hooks/useSummary';
 import { SummaryCard } from '@/src/components/summary/SummaryCard';
+import { SwipeableRow } from '@/src/components/summary/SwipeableRow';
 
 export default function LibraryScreen() {
   const { data: summaries, isLoading } = useSummaries();
+  const deleteMutation = useDeleteSummary();
   const [search, setSearch] = useState('');
 
   const filtered = useMemo(() => {
@@ -32,7 +34,11 @@ export default function LibraryScreen() {
       style={styles.container}
       data={filtered}
       keyExtractor={(item) => item.id}
-      renderItem={({ item }) => <SummaryCard summary={item} />}
+      renderItem={({ item }) => (
+        <SwipeableRow onDelete={() => deleteMutation.mutate(item.id)}>
+          <SummaryCard summary={item} />
+        </SwipeableRow>
+      )}
       contentContainerStyle={styles.listContent}
       keyboardDismissMode="on-drag"
       ListHeaderComponent={
