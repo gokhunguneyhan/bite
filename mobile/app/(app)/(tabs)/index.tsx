@@ -11,13 +11,16 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { router } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/src/constants/colors';
 import { extractVideoId } from '@/src/services/youtube';
 import { useSummaries, useGenerateSummary } from '@/src/hooks/useSummary';
 import { useVideoPreview } from '@/src/hooks/useVideoPreview';
 import { usePreferences } from '@/src/hooks/usePreferences';
+import { useDueCards } from '@/src/hooks/useSpacedRepetition';
+import { useShareIntentUrl } from '@/src/hooks/useShareIntent';
 import { SummaryCard } from '@/src/components/summary/SummaryCard';
 import { SummarizeProgress } from '@/src/components/summary/SummarizeProgress';
 
@@ -25,9 +28,17 @@ export default function HomeScreen() {
   const [url, setUrl] = useState('');
   const { data: summaries, isLoading } = useSummaries();
   const { data: preferences } = usePreferences();
+  const { data: dueCards } = useDueCards();
+  const dueCount = dueCards?.length ?? 0;
   const generateMutation = useGenerateSummary();
   const videoId = useMemo(() => extractVideoId(url.trim()), [url]);
   const { data: preview } = useVideoPreview(videoId);
+
+  // Auto-fill URL when the user shares a YouTube link via the iOS/Android share sheet
+  const handleSharedUrl = useCallback((sharedUrl: string) => {
+    setUrl(sharedUrl);
+  }, []);
+  useShareIntentUrl(handleSharedUrl);
 
   const forYouSummaries = useMemo(() => {
     if (!summaries || !preferences?.preferredCategories?.length) return [];
@@ -72,6 +83,20 @@ export default function HomeScreen() {
         keyboardDismissMode="on-drag"
         ListHeaderComponent={
           <View style={styles.header}>
+            {dueCount > 0 && (
+              <Pressable
+                style={styles.dueBanner}
+                onPress={() => router.push('/review')}
+              >
+                <View style={styles.dueBannerLeft}>
+                  <Ionicons name="time" size={20} color="#fff" />
+                  <Text style={styles.dueBannerText}>
+                    {dueCount} card{dueCount !== 1 ? 's' : ''} ready for review
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="#fff" />
+              </Pressable>
+            )}
             <Text style={styles.greeting}>What will you learn today?</Text>
 
             <View style={styles.inputContainer}>
@@ -165,6 +190,25 @@ const styles = StyleSheet.create({
   },
   header: {
     marginBottom: 8,
+  },
+  dueBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: Colors.primary,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 16,
+  },
+  dueBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  dueBannerText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
   },
   greeting: {
     fontSize: 24,

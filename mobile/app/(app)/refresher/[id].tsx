@@ -14,6 +14,11 @@ import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/src/constants/colors';
 import { useSummary } from '@/src/hooks/useSummary';
+import {
+  useIsCardScheduled,
+  useScheduleCard,
+  useUnscheduleCard,
+} from '@/src/hooks/useSpacedRepetition';
 import type { RefresherCard } from '@/src/types/summary';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -170,6 +175,9 @@ export default function RefresherScreen() {
             <Text style={styles.cardTitle}>{currentCard.title}</Text>
             <Text style={styles.cardExplanation}>{currentCard.explanation}</Text>
           </ScrollView>
+
+          {/* Schedule toggle */}
+          <ScheduleToggle summaryId={id} cardId={currentCard.id} />
         </Animated.View>
       </View>
 
@@ -189,6 +197,53 @@ export default function RefresherScreen() {
         </Pressable>
       </View>
     </View>
+  );
+}
+
+function ScheduleToggle({
+  summaryId,
+  cardId,
+}: {
+  summaryId: string;
+  cardId: string;
+}) {
+  const { data: scheduled, isLoading } = useIsCardScheduled(summaryId, cardId);
+  const scheduleMutation = useScheduleCard();
+  const unscheduleMutation = useUnscheduleCard();
+  const isPending = scheduleMutation.isPending || unscheduleMutation.isPending;
+
+  const handleToggle = () => {
+    if (isPending || isLoading) return;
+    if (scheduled) {
+      unscheduleMutation.mutate({ summaryId, cardId });
+    } else {
+      scheduleMutation.mutate({ summaryId, cardId });
+    }
+  };
+
+  return (
+    <Pressable
+      style={[
+        styles.scheduleButton,
+        scheduled && styles.scheduleButtonActive,
+      ]}
+      onPress={handleToggle}
+      disabled={isPending}
+    >
+      <Ionicons
+        name={scheduled ? 'time' : 'time-outline'}
+        size={16}
+        color={scheduled ? '#fff' : Colors.textSecondary}
+      />
+      <Text
+        style={[
+          styles.scheduleButtonText,
+          scheduled && styles.scheduleButtonTextActive,
+        ]}
+      >
+        {scheduled ? 'Scheduled' : 'Schedule'}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -350,5 +405,31 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 17,
     fontWeight: '600',
+  },
+  scheduleButton: {
+    position: 'absolute',
+    bottom: 16,
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.background,
+  },
+  scheduleButtonActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  scheduleButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.textSecondary,
+  },
+  scheduleButtonTextActive: {
+    color: '#fff',
   },
 });
