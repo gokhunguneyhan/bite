@@ -133,7 +133,7 @@ Return a JSON object with this exact structure (raw JSON only, no markdown):
 - Each section reads like a mini-article, not a list
 - Preserve stories, quotes, and numbers verbatim
 - Include WHY behind ideas, not just WHAT
-- Timestamps as seconds based on transcript position
+- The transcript contains [M:SS] or [H:MM:SS] time markers every ~30s. Use these to set accurate timestampStart/timestampEnd values AS SECONDS (integers). Example: [5:30] → 330, [1:15:00] → 4500. Do NOT invent timestamps — only use markers present in the transcript.
 
 **refresherCards:**
 - Capture the STORY behind each concept

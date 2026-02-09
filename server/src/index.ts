@@ -36,13 +36,13 @@ app.post('/api/summarize', requireAuth, async (req, res) => {
       fetchTranscript(videoId),
     ]);
 
-    const { text: transcript, languageCode: originalLanguage } = transcriptResult;
+    const { text: transcript, languageCode: originalLanguage, durationSeconds } = transcriptResult;
 
     const timeoutMs = calculateTimeoutMs(transcript.length);
     req.setTimeout(timeoutMs);
 
     console.log(
-      `[summarize] Got transcript (${transcript.length} chars, lang=${originalLanguage}) for "${metadata.title}" — timeout ${timeoutMs / 1000}s`,
+      `[summarize] Got transcript (${transcript.length} chars, lang=${originalLanguage}, duration=${Math.round(durationSeconds / 60)}min) for "${metadata.title}" — timeout ${timeoutMs / 1000}s`,
     );
 
     // Generate summary in the video's original language

@@ -12,6 +12,7 @@ interface VideoMetadata {
 interface TranscriptResult {
   text: string;
   languageCode: string;
+  durationSeconds: number;
 }
 
 export async function fetchVideoMetadata(
@@ -49,8 +50,20 @@ try:
     from youtube_transcript_api import YouTubeTranscriptApi
     ytt_api = YouTubeTranscriptApi()
     transcript = ytt_api.fetch(video_id)
-    text = ' '.join([entry.text for entry in transcript.snippets])
-    print(json.dumps({"ok": True, "text": text, "languageCode": transcript.language_code}))
+    parts = []
+    next_marker = 0
+    for entry in transcript.snippets:
+        if entry.start >= next_marker:
+            total_secs = int(entry.start)
+            h, rem = divmod(total_secs, 3600)
+            m, s = divmod(rem, 60)
+            stamp = f'{h}:{m:02d}:{s:02d}' if h > 0 else f'{m}:{s:02d}'
+            parts.append(f'[{stamp}]')
+            next_marker = entry.start + 30
+        parts.append(entry.text)
+    text = ' '.join(parts)
+    duration = int(transcript.snippets[-1].start + transcript.snippets[-1].duration) if transcript.snippets else 0
+    print(json.dumps({"ok": True, "text": text, "languageCode": transcript.language_code, "durationSeconds": duration}))
 except Exception as e:
     print(json.dumps({"ok": False, "error": str(e)}))
 `,
@@ -70,6 +83,7 @@ except Exception as e:
     return {
       text: result.text,
       languageCode: result.languageCode || 'en',
+      durationSeconds: result.durationSeconds || 0,
     };
   } catch (error: any) {
     if (error.message?.includes('No transcript')) {

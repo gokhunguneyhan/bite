@@ -6,16 +6,35 @@ import { Colors } from '@/src/constants/colors';
 const STEPS = [
   { label: 'Fetching video info...', icon: 'videocam-outline' as const, duration: 3000 },
   { label: 'Downloading transcript...', icon: 'document-text-outline' as const, duration: 5000 },
-  { label: 'Analyzing content...', icon: 'sparkles-outline' as const, duration: 15000 },
-  { label: 'Generating summary...', icon: 'create-outline' as const, duration: 40000 },
-  { label: 'Building refresher cards...', icon: 'albums-outline' as const, duration: 40000 },
-  { label: 'Almost there...', icon: 'checkmark-circle-outline' as const, duration: 60000 },
+  { label: 'Analyzing content...', icon: 'sparkles-outline' as const, duration: 20000 },
+  { label: 'Generating summary...', icon: 'create-outline' as const, duration: 60000 },
+  { label: 'Building refresher cards...', icon: 'albums-outline' as const, duration: 60000 },
+  { label: 'Polishing output...', icon: 'checkmark-circle-outline' as const, duration: 120000 },
 ];
+
+const TOTAL_DURATION_MS = STEPS.reduce((sum, s) => sum + s.duration, 0);
+
+function formatElapsed(ms: number): string {
+  const totalSec = Math.floor(ms / 1000);
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
 
 export function SummarizeProgress() {
   const [currentStep, setCurrentStep] = useState(0);
+  const [elapsedMs, setElapsedMs] = useState(0);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const progressAnim = useRef(new Animated.Value(0)).current;
+  const startTime = useRef(Date.now());
+
+  // Elapsed time ticker
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setElapsedMs(Date.now() - startTime.current);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -28,7 +47,6 @@ export function SummarizeProgress() {
   useEffect(() => {
     if (currentStep >= STEPS.length) return;
 
-    // Animate progress bar for current step
     const stepProgress = (currentStep + 1) / STEPS.length;
     Animated.timing(progressAnim, {
       toValue: stepProgress,
@@ -36,7 +54,6 @@ export function SummarizeProgress() {
       useNativeDriver: false,
     }).start();
 
-    // Move to next step after duration
     if (currentStep < STEPS.length - 1) {
       const timer = setTimeout(() => {
         setCurrentStep((prev) => prev + 1);
@@ -46,6 +63,11 @@ export function SummarizeProgress() {
   }, [currentStep]);
 
   const step = STEPS[Math.min(currentStep, STEPS.length - 1)];
+
+  // Estimate remaining time from step durations
+  const elapsedStepMs = STEPS.slice(0, currentStep).reduce((sum, s) => sum + s.duration, 0);
+  const remainingMs = Math.max(0, TOTAL_DURATION_MS - elapsedStepMs - (elapsedMs - elapsedStepMs));
+  const estLeft = remainingMs > 5000 ? formatElapsed(remainingMs) : '< 0:10';
 
   const progressWidth = progressAnim.interpolate({
     inputRange: [0, 1],
@@ -65,18 +87,23 @@ export function SummarizeProgress() {
           <Animated.View style={[styles.progressFill, { width: progressWidth }]} />
         </View>
 
-        <View style={styles.steps}>
-          {STEPS.map((s, i) => (
-            <View key={i} style={styles.stepDot}>
-              <View
-                style={[
-                  styles.dot,
-                  i < currentStep && styles.dotDone,
-                  i === currentStep && styles.dotActive,
-                ]}
-              />
-            </View>
-          ))}
+        <View style={styles.footer}>
+          <View style={styles.steps}>
+            {STEPS.map((_, i) => (
+              <View key={i} style={styles.stepDot}>
+                <View
+                  style={[
+                    styles.dot,
+                    i < currentStep && styles.dotDone,
+                    i === currentStep && styles.dotActive,
+                  ]}
+                />
+              </View>
+            ))}
+          </View>
+          <Text style={styles.timeText}>
+            {formatElapsed(elapsedMs)} elapsed · ~{estLeft} left
+          </Text>
         </View>
       </View>
     </Animated.View>
@@ -120,6 +147,11 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
     borderRadius: 2,
   },
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
   steps: {
     flexDirection: 'row',
     gap: 6,
@@ -139,5 +171,9 @@ const styles = StyleSheet.create({
   dotActive: {
     backgroundColor: Colors.primary,
     width: 16,
+  },
+  timeText: {
+    fontSize: 12,
+    color: Colors.textSecondary,
   },
 });
