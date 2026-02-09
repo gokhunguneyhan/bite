@@ -1,37 +1,20 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { Redirect, Stack } from 'expo-router';
 import { Text, View } from 'react-native';
 import { useSession } from '@/src/providers/SessionProvider';
 import { migrateLocalSummaries } from '@/src/services/summaryService';
-import { hasCompletedOnboarding } from '@/src/services/preferencesService';
-import PersonalizeScreen from '@/src/components/onboarding/PersonalizeScreen';
 import { Toast } from '@/src/components/ui/Toast';
 
 export default function AppLayout() {
   const { session, user, isLoading } = useSession();
   const [migrating, setMigrating] = useState(false);
-  const [checkingOnboarding, setCheckingOnboarding] = useState(true);
-  const [needsOnboarding, setNeedsOnboarding] = useState(false);
 
   useEffect(() => {
     if (user) {
       setMigrating(true);
       migrateLocalSummaries(user.id).finally(() => setMigrating(false));
-
-      // Check if the user has completed personalisation onboarding
-      setCheckingOnboarding(true);
-      hasCompletedOnboarding()
-        .then((completed) => setNeedsOnboarding(!completed))
-        .catch(() => setNeedsOnboarding(false))
-        .finally(() => setCheckingOnboarding(false));
-    } else {
-      setCheckingOnboarding(false);
     }
   }, [user?.id]);
-
-  const handleOnboardingComplete = useCallback(() => {
-    setNeedsOnboarding(false);
-  }, []);
 
   if (isLoading) {
     return (
@@ -45,16 +28,12 @@ export default function AppLayout() {
     return <Redirect href="/welcome" />;
   }
 
-  if (migrating || checkingOnboarding) {
+  if (migrating) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
         <Text>Syncing your data...</Text>
       </View>
     );
-  }
-
-  if (needsOnboarding) {
-    return <PersonalizeScreen onComplete={handleOnboardingComplete} />;
   }
 
   return (
@@ -99,6 +78,10 @@ export default function AppLayout() {
         <Stack.Screen
           name="mock-summary"
           options={{ title: 'Summary Preview', headerBackTitle: 'Back' }}
+        />
+        <Stack.Screen
+          name="personalise"
+          options={{ title: 'Personalise', presentation: 'fullScreenModal' }}
         />
         <Stack.Screen
           name="review"

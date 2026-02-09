@@ -261,10 +261,7 @@ export default function HomeScreen() {
           <View style={styles.personaliseActions}>
             <Pressable
               style={styles.personaliseButton}
-              onPress={() => {
-                // TODO: Navigate to PersonalizeScreen when it becomes a route
-                showToast('Coming soon');
-              }}
+              onPress={() => router.push('/personalise')}
               accessibilityLabel="Personalise feed"
               accessibilityRole="button">
               <Text style={styles.personaliseButtonText}>Personalise</Text>

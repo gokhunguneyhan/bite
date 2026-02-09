@@ -14,7 +14,7 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/src/constants/colors';
 import { extractVideoId } from '@/src/services/youtube';
-import { useGenerateSummary } from '@/src/hooks/useSummary';
+import { useGenerateSummary, useSummaries } from '@/src/hooks/useSummary';
 import { useVideoPreview } from '@/src/hooks/useVideoPreview';
 import { useShareIntentUrl } from '@/src/hooks/useShareIntent';
 import { FullScreenLoader } from '@/src/components/summary/FullScreenLoader';
@@ -22,6 +22,7 @@ import { FullScreenLoader } from '@/src/components/summary/FullScreenLoader';
 export default function AnalyseScreen() {
   const [url, setUrl] = useState('');
   const generateMutation = useGenerateSummary();
+  const { data: summaries } = useSummaries();
   const videoId = useMemo(() => extractVideoId(url.trim()), [url]);
   const { data: preview } = useVideoPreview(videoId);
 
@@ -30,10 +31,19 @@ export default function AnalyseScreen() {
   }, []);
   useShareIntentUrl(handleSharedUrl);
 
+  // Gate first-time users through paywall
+  const isNewUser = !summaries || summaries.length === 0;
+
   const handleAnalyse = () => {
     const id = extractVideoId(url.trim());
     if (!id) {
       Alert.alert('Invalid URL', 'Please paste a valid YouTube video URL.');
+      return;
+    }
+
+    // TODO: Check actual subscription status instead of summary count
+    if (isNewUser) {
+      router.push('/paywall');
       return;
     }
 
