@@ -1,42 +1,42 @@
-import {
-  View,
-  Text,
-  Pressable,
-  Dimensions,
-  StyleSheet,
-} from 'react-native';
-import { useState, useRef } from 'react';
+import { View, Text, Pressable, Dimensions, StyleSheet } from 'react-native';
+import { useState } from 'react';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/src/constants/colors';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-const ONBOARDING_STEPS = [
+const SLIDES = [
   {
-    icon: 'time-outline' as const,
-    title: 'Get Back\nYour Time',
+    icon: 'sparkles' as const,
+    title: 'Never miss\nwhat matters',
     subtitle:
-      'Stop feeling guilty about unwatched videos. Get the knowledge in minutes, not hours.',
+      'Contextual summaries preserve reasoning, stories, and connections — not just bullet points.',
   },
   {
-    icon: 'bulb-outline' as const,
-    title: 'Real Knowledge,\nNot Bullet Points',
+    icon: 'albums' as const,
+    title: 'Remember\neverything',
     subtitle:
-      'Our contextual summaries preserve reasoning, stories, and connections between ideas.',
+      'Refresher cards help you retain key insights using spaced repetition, powered by science.',
   },
   {
-    icon: 'albums-outline' as const,
-    title: 'Remember\nWhat Matters',
+    icon: 'people' as const,
+    title: 'Learn from\nthe community',
     subtitle:
-      'Refresher cards help you retain key insights. Swipe to save the ones that resonate.',
+      'Discover analyses from other learners. Follow creators and channels you care about.',
   },
-];
+  {
+    icon: 'time' as const,
+    title: 'Your time,\nreclaimed',
+    subtitle:
+      'The average YouTube video is 15 minutes. A summary takes 2. Do the math.',
+  },
+] as const;
 
 export default function WelcomeScreen() {
   const [step, setStep] = useState(0);
-  const isLast = step === ONBOARDING_STEPS.length - 1;
-  const current = ONBOARDING_STEPS[step];
+  const isLast = step === SLIDES.length - 1;
+  const current = SLIDES[step];
 
   const handleNext = () => {
     if (isLast) {
@@ -48,6 +48,15 @@ export default function WelcomeScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Skip button - top right */}
+      <Pressable
+        style={styles.skipBtn}
+        onPress={() => router.push('/login')}
+        accessibilityLabel="Skip to login"
+        accessibilityRole="button">
+        <Text style={styles.skipText}>Skip</Text>
+      </Pressable>
+
       <View style={styles.content}>
         <View style={styles.iconContainer}>
           <Ionicons name={current.icon} size={56} color={Colors.primary} />
@@ -58,7 +67,7 @@ export default function WelcomeScreen() {
 
       {/* Dots */}
       <View style={styles.dots}>
-        {ONBOARDING_STEPS.map((_, i) => (
+        {SLIDES.map((_, i) => (
           <View
             key={i}
             style={[styles.dot, i === step && styles.dotActive]}
@@ -67,7 +76,11 @@ export default function WelcomeScreen() {
       </View>
 
       <View style={styles.actions}>
-        <Pressable style={styles.primaryButton} onPress={handleNext}>
+        <Pressable
+          style={styles.primaryButton}
+          onPress={handleNext}
+          accessibilityLabel={isLast ? 'Get Started' : 'Next'}
+          accessibilityRole="button">
           <Text style={styles.primaryButtonText}>
             {isLast ? 'Get Started' : 'Next'}
           </Text>
@@ -75,7 +88,9 @@ export default function WelcomeScreen() {
 
         <Pressable
           style={styles.secondaryButton}
-          onPress={() => router.push('/login')}>
+          onPress={() => router.push('/login')}
+          accessibilityLabel="Log in"
+          accessibilityRole="button">
           <Text style={styles.secondaryButtonText}>
             Already have an account? Log in
           </Text>
@@ -91,8 +106,18 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
     justifyContent: 'space-between',
     padding: 24,
-    paddingTop: 80,
-    paddingBottom: 60,
+    paddingTop: 60,
+    paddingBottom: 50,
+  },
+  skipBtn: {
+    alignSelf: 'flex-end',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  skipText: {
+    fontSize: 16,
+    color: Colors.textSecondary,
+    fontWeight: '500',
   },
   content: {
     flex: 1,
@@ -100,20 +125,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   iconContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: 110,
+    height: 110,
+    borderRadius: 55,
     backgroundColor: Colors.primary + '12',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: 36,
   },
   title: {
-    fontSize: 36,
+    fontSize: 38,
     fontWeight: '800',
     color: Colors.text,
     textAlign: 'center',
-    lineHeight: 44,
+    lineHeight: 46,
   },
   subtitle: {
     fontSize: 17,
@@ -121,7 +146,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 16,
     lineHeight: 24,
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
   },
   dots: {
     flexDirection: 'row',

@@ -17,7 +17,7 @@ import { extractVideoId } from '@/src/services/youtube';
 import { useGenerateSummary } from '@/src/hooks/useSummary';
 import { useVideoPreview } from '@/src/hooks/useVideoPreview';
 import { useShareIntentUrl } from '@/src/hooks/useShareIntent';
-import { SummarizeProgress } from '@/src/components/summary/SummarizeProgress';
+import { FullScreenLoader } from '@/src/components/summary/FullScreenLoader';
 
 export default function AnalyseScreen() {
   const [url, setUrl] = useState('');
@@ -99,7 +99,11 @@ export default function AnalyseScreen() {
           )}
 
           {isGenerating ? (
-            <SummarizeProgress />
+            <FullScreenLoader
+              thumbnailUrl={preview?.thumbnailUrl}
+              videoTitle={preview?.title}
+              channelName={preview?.channelName}
+            />
           ) : (
             <Pressable
               style={[styles.button, !url.trim() && styles.buttonDisabled]}

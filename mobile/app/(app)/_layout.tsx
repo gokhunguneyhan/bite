@@ -93,6 +93,14 @@ export default function AppLayout() {
           options={{ title: 'Followers', headerBackTitle: 'Back' }}
         />
         <Stack.Screen
+          name="paywall"
+          options={{ title: '', presentation: 'modal', headerShown: false }}
+        />
+        <Stack.Screen
+          name="mock-summary"
+          options={{ title: 'Summary Preview', headerBackTitle: 'Back' }}
+        />
+        <Stack.Screen
           name="review"
           options={{ title: 'Review Cards', presentation: 'fullScreenModal' }}
         />
