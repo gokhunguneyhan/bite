@@ -15,6 +15,7 @@ import {
   useSummaries,
   useCommunitySummaries,
   useSubscriptions,
+  useImportYouTubeSubscriptions,
 } from '@/src/hooks/useSummary';
 import { usePreferences, useOnboardingStatus } from '@/src/hooks/usePreferences';
 import { useDueCards } from '@/src/hooks/useSpacedRepetition';
@@ -30,8 +31,11 @@ export default function HomeScreen() {
   const { data: dueCards } = useDueCards();
   const { data: hasOnboarded } = useOnboardingStatus();
   const showToast = useToast();
+  const importMutation = useImportYouTubeSubscriptions();
 
   const dueCount = dueCards?.length ?? 0;
+  const hasPersonalised = hasOnboarded === true;
+  const hasSubscriptions = (subscriptions?.length ?? 0) > 0;
 
   // Summaries that have refresher cards
   const summariesWithCards = useMemo(
@@ -61,7 +65,16 @@ export default function HomeScreen() {
     return communitySummaries;
   }, [communitySummaries, preferences?.preferredCategories]);
 
-  const showPersonalisePrompt = hasOnboarded === false;
+  const handleImportYouTube = () => {
+    importMutation.mutate(undefined, {
+      onSuccess: (imported) => {
+        showToast(`Imported ${imported.length} channels from YouTube`);
+      },
+      onError: () => {
+        showToast('Failed to import channels');
+      },
+    });
+  };
 
   if (isLoading && isCommunityLoading) {
     return (
@@ -166,8 +179,56 @@ export default function HomeScreen() {
         </View>
       )}
 
-      {/* New from Followed Channels */}
-      {subscriptions && subscriptions.length > 0 && (
+      {/* Personalise your feed — shown when user hasn't picked interests */}
+      {!hasPersonalised && !hasSubscriptions && (
+        <>
+          <Text style={styles.sectionTitle}>Customise Your Feed</Text>
+          <View style={styles.onboardingCard}>
+            <View style={styles.onboardingIconRow}>
+              <View style={styles.onboardingIcon}>
+                <Ionicons name="sparkles" size={24} color={Colors.primary} />
+              </View>
+            </View>
+            <Text style={styles.onboardingTitle}>
+              Pick your goals & interests to{'\n'}customise your feed
+            </Text>
+            <Text style={styles.onboardingSubtitle}>
+              We'll show you summaries and channels that match what you care
+              about.
+            </Text>
+            <Pressable
+              style={styles.onboardingPrimaryBtn}
+              onPress={() => router.push('/personalise')}
+              accessibilityLabel="Personalise my feed"
+              accessibilityRole="button">
+              <Ionicons name="color-wand-outline" size={18} color="#fff" />
+              <Text style={styles.onboardingPrimaryText}>
+                Personalise my feed
+              </Text>
+            </Pressable>
+            <Pressable
+              style={styles.onboardingSecondaryBtn}
+              onPress={handleImportYouTube}
+              disabled={importMutation.isPending}
+              accessibilityLabel="Import subscribed channels from YouTube"
+              accessibilityRole="button">
+              {importMutation.isPending ? (
+                <ActivityIndicator color={Colors.primary} size="small" />
+              ) : (
+                <>
+                  <Ionicons name="logo-youtube" size={18} color={Colors.primary} />
+                  <Text style={styles.onboardingSecondaryText}>
+                    Import subscribed channels from YouTube
+                  </Text>
+                </>
+              )}
+            </Pressable>
+          </View>
+        </>
+      )}
+
+      {/* New from Followed Channels — only shown after user has subscriptions */}
+      {hasSubscriptions && (
         <>
           <Text style={styles.sectionTitle}>New from Followed Channels</Text>
           {channelSummaries.length > 0 ? (
@@ -206,26 +267,11 @@ export default function HomeScreen() {
                 color={Colors.tabIconDefault}
               />
               <Text style={styles.placeholderText}>
-                No new videos from your followed channels yet.
+                No analysed videos from your followed channels yet. Tap a
+                channel to browse their latest videos.
               </Text>
             </View>
           )}
-        </>
-      )}
-
-      {!subscriptions?.length && (
-        <>
-          <Text style={styles.sectionTitle}>Followed Channels</Text>
-          <View style={styles.placeholder}>
-            <Ionicons
-              name="people-outline"
-              size={32}
-              color={Colors.tabIconDefault}
-            />
-            <Text style={styles.placeholderText}>
-              Follow channels to see new videos here.
-            </Text>
-          </View>
         </>
       )}
 
@@ -247,34 +293,6 @@ export default function HomeScreen() {
           <Text style={styles.placeholderText}>
             No community summaries yet. Be the first to share!
           </Text>
-        </View>
-      )}
-
-      {/* Personalisation prompt */}
-      {showPersonalisePrompt && (
-        <View style={styles.personaliseCard}>
-          <Ionicons name="sparkles" size={24} color={Colors.primary} />
-          <Text style={styles.personaliseText}>
-            Pick your interests and follow YouTube channels to personalise your
-            feed.
-          </Text>
-          <View style={styles.personaliseActions}>
-            <Pressable
-              style={styles.personaliseButton}
-              onPress={() => router.push('/personalise')}
-              accessibilityLabel="Personalise feed"
-              accessibilityRole="button">
-              <Text style={styles.personaliseButtonText}>Personalise</Text>
-            </Pressable>
-            <Pressable
-              onPress={() => showToast('Coming soon')}
-              accessibilityLabel="Import from YouTube"
-              accessibilityRole="button">
-              <Text style={styles.personaliseSecondary}>
-                Import from YouTube
-              </Text>
-            </Pressable>
-          </View>
         </View>
       )}
 
@@ -433,45 +451,78 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
   },
-  // Community
-  loader: {
-    marginVertical: 20,
-  },
-  // Personalisation prompt
-  personaliseCard: {
-    backgroundColor: Colors.primary + '08',
-    borderWidth: 1,
-    borderColor: Colors.primary + '20',
-    borderRadius: 12,
-    padding: 20,
+  // Onboarding card
+  onboardingCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: 16,
+    padding: 24,
     alignItems: 'center',
     gap: 12,
-    marginTop: 8,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: Colors.primary + '20',
   },
-  personaliseText: {
-    fontSize: 14,
+  onboardingIconRow: {
+    marginBottom: 4,
+  },
+  onboardingIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: Colors.primary + '12',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  onboardingTitle: {
+    fontSize: 18,
+    fontWeight: '700',
     color: Colors.text,
     textAlign: 'center',
-    lineHeight: 20,
+    lineHeight: 24,
   },
-  personaliseActions: {
+  onboardingSubtitle: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
+    paddingHorizontal: 8,
+  },
+  onboardingPrimaryBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
-  },
-  personaliseButton: {
+    justifyContent: 'center',
+    gap: 8,
     backgroundColor: Colors.primary,
-    borderRadius: 8,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    width: '100%',
+    marginTop: 4,
   },
-  personaliseButtonText: {
+  onboardingPrimaryText: {
     color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  onboardingSecondaryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1.5,
+    borderColor: Colors.primary,
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    width: '100%',
+  },
+  onboardingSecondaryText: {
+    color: Colors.primary,
     fontSize: 14,
     fontWeight: '600',
   },
-  personaliseSecondary: {
-    fontSize: 13,
-    color: Colors.textSecondary,
+  // Community
+  loader: {
+    marginVertical: 20,
   },
 });

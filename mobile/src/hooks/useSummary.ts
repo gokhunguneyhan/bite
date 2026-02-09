@@ -16,6 +16,7 @@ import {
   unsubscribeFromCreator,
   isSubscribed,
 } from '@/src/services/creatorService';
+import { importYouTubeSubscriptions } from '@/src/services/youtubeImportService';
 
 export function useSummaries() {
   return useQuery({
@@ -142,6 +143,20 @@ export function useUnsubscribe() {
     onSuccess: (_data, channelName) => {
       queryClient.invalidateQueries({ queryKey: ['subscriptions'] });
       queryClient.setQueryData(['subscribed', channelName], false);
+    },
+  });
+}
+
+export function useImportYouTubeSubscriptions() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: importYouTubeSubscriptions,
+    onSuccess: (imported) => {
+      queryClient.invalidateQueries({ queryKey: ['subscriptions'] });
+      for (const sub of imported) {
+        queryClient.setQueryData(['subscribed', sub.channelName], true);
+      }
     },
   });
 }

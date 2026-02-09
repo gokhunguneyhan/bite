@@ -9,8 +9,8 @@ import {
   Platform,
   Alert,
 } from 'react-native';
-import { useState, useMemo, useCallback } from 'react';
-import { router } from 'expo-router';
+import { useState, useMemo, useCallback, useEffect } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/src/constants/colors';
 import { extractVideoId } from '@/src/services/youtube';
@@ -20,7 +20,15 @@ import { useShareIntentUrl } from '@/src/hooks/useShareIntent';
 import { FullScreenLoader } from '@/src/components/summary/FullScreenLoader';
 
 export default function AnalyseScreen() {
-  const [url, setUrl] = useState('');
+  const params = useLocalSearchParams<{ url?: string }>();
+  const [url, setUrl] = useState(params.url ?? '');
+
+  // Pre-fill URL from route params (e.g. from creator page)
+  useEffect(() => {
+    if (params.url && params.url !== url) {
+      setUrl(params.url);
+    }
+  }, [params.url]);
   const generateMutation = useGenerateSummary();
   const { data: summaries } = useSummaries();
   const videoId = useMemo(() => extractVideoId(url.trim()), [url]);
