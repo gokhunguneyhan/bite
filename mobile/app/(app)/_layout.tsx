@@ -5,6 +5,7 @@ import { useSession } from '@/src/providers/SessionProvider';
 import { migrateLocalSummaries } from '@/src/services/summaryService';
 import { hasCompletedOnboarding } from '@/src/services/preferencesService';
 import PersonalizeScreen from '@/src/components/onboarding/PersonalizeScreen';
+import { Toast } from '@/src/components/ui/Toast';
 
 export default function AppLayout() {
   const { session, user, isLoading } = useSession();
@@ -57,27 +58,34 @@ export default function AppLayout() {
   }
 
   return (
-    <Stack>
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen
-        name="summary/[id]"
-        options={{ title: 'Summary', headerBackTitle: 'Back' }}
-      />
-      <Stack.Screen
-        name="refresher/[id]"
-        options={{
-          title: 'Refresher Cards',
-          presentation: 'fullScreenModal',
-        }}
-      />
-      <Stack.Screen
-        name="creator/[id]"
-        options={{ title: 'Creator Profile', headerBackTitle: 'Back' }}
-      />
-      <Stack.Screen
-        name="review"
-        options={{ title: 'Review Cards', presentation: 'fullScreenModal' }}
-      />
-    </Stack>
+    <View style={{ flex: 1 }}>
+      <Stack>
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen
+          name="analyse"
+          options={{ title: 'Analyse', headerBackTitle: 'Back' }}
+        />
+        <Stack.Screen
+          name="summary/[id]"
+          options={{ title: 'Summary', headerBackTitle: 'Back' }}
+        />
+        <Stack.Screen
+          name="refresher/[id]"
+          options={{
+            title: 'Refresher Cards',
+            presentation: 'fullScreenModal',
+          }}
+        />
+        <Stack.Screen
+          name="creator/[id]"
+          options={{ title: 'Creator Profile', headerBackTitle: 'Back' }}
+        />
+        <Stack.Screen
+          name="review"
+          options={{ title: 'Review Cards', presentation: 'fullScreenModal' }}
+        />
+      </Stack>
+      <Toast />
+    </View>
   );
 }

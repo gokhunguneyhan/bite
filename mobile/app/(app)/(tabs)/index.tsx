@@ -1,44 +1,25 @@
 import {
   View,
   Text,
-  TextInput,
   Pressable,
   FlatList,
-  Image,
   StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
-import { useState, useMemo, useCallback } from 'react';
+import { useMemo } from 'react';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/src/constants/colors';
-import { extractVideoId } from '@/src/services/youtube';
-import { useSummaries, useGenerateSummary } from '@/src/hooks/useSummary';
-import { useVideoPreview } from '@/src/hooks/useVideoPreview';
+import { useSummaries } from '@/src/hooks/useSummary';
 import { usePreferences } from '@/src/hooks/usePreferences';
 import { useDueCards } from '@/src/hooks/useSpacedRepetition';
-import { useShareIntentUrl } from '@/src/hooks/useShareIntent';
 import { SummaryCard } from '@/src/components/summary/SummaryCard';
-import { SummarizeProgress } from '@/src/components/summary/SummarizeProgress';
 
 export default function HomeScreen() {
-  const [url, setUrl] = useState('');
   const { data: summaries, isLoading } = useSummaries();
   const { data: preferences } = usePreferences();
   const { data: dueCards } = useDueCards();
   const dueCount = dueCards?.length ?? 0;
-  const generateMutation = useGenerateSummary();
-  const videoId = useMemo(() => extractVideoId(url.trim()), [url]);
-  const { data: preview } = useVideoPreview(videoId);
-
-  // Auto-fill URL when the user shares a YouTube link via the iOS/Android share sheet
-  const handleSharedUrl = useCallback((sharedUrl: string) => {
-    setUrl(sharedUrl);
-  }, []);
-  useShareIntentUrl(handleSharedUrl);
 
   const forYouSummaries = useMemo(() => {
     if (!summaries || !preferences?.preferredCategories?.length) return [];
@@ -48,133 +29,86 @@ export default function HomeScreen() {
     );
   }, [summaries, preferences?.preferredCategories]);
 
-  const handleSummarize = () => {
-    const videoId = extractVideoId(url.trim());
-    if (!videoId) {
-      Alert.alert(
-        'Invalid URL',
-        'Please paste a valid YouTube video URL.',
-      );
-      return;
-    }
-
-    generateMutation.mutate(videoId, {
-      onSuccess: (summary) => {
-        setUrl('');
-        router.push(`/summary/${summary.id}`);
-      },
-      onError: (error: Error) => {
-        Alert.alert('Error', error.message);
-      },
-    });
-  };
-
-  const isGenerating = generateMutation.isPending;
-
   return (
-    <KeyboardAvoidingView
+    <FlatList
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <FlatList
-        data={summaries}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => <SummaryCard summary={item} />}
-        contentContainerStyle={styles.listContent}
-        keyboardDismissMode="on-drag"
-        ListHeaderComponent={
-          <View style={styles.header}>
-            {dueCount > 0 && (
-              <Pressable
-                style={styles.dueBanner}
-                onPress={() => router.push('/review')}
-              >
-                <View style={styles.dueBannerLeft}>
-                  <Ionicons name="time" size={20} color="#fff" />
-                  <Text style={styles.dueBannerText}>
-                    {dueCount} card{dueCount !== 1 ? 's' : ''} ready for review
-                  </Text>
-                </View>
-                <Ionicons name="chevron-forward" size={18} color="#fff" />
-              </Pressable>
-            )}
-            <Text style={styles.greeting}>What will you learn today?</Text>
-
-            <View style={styles.inputContainer}>
-              <TextInput
-                style={styles.input}
-                placeholder="Paste a YouTube URL..."
-                value={url}
-                onChangeText={setUrl}
-                autoCapitalize="none"
-                autoCorrect={false}
-                keyboardType="url"
-                placeholderTextColor={Colors.tabIconDefault}
-                returnKeyType="go"
-                onSubmitEditing={handleSummarize}
-                editable={!isGenerating}
+      data={summaries}
+      keyExtractor={(item) => item.id}
+      renderItem={({ item }) => <SummaryCard summary={item} />}
+      contentContainerStyle={styles.listContent}
+      keyboardDismissMode="on-drag"
+      ListHeaderComponent={
+        <View style={styles.header}>
+          {/* Top bar */}
+          <View style={styles.topBar}>
+            <Pressable
+              style={styles.addButton}
+              onPress={() => router.push('/analyse')}
+              accessibilityLabel="Analyse a new video"
+              accessibilityRole="button">
+              <Ionicons name="add" size={24} color="#fff" />
+            </Pressable>
+            <Text style={styles.appTitle}>YT Summarise</Text>
+            <Pressable
+              style={styles.bellButton}
+              accessibilityLabel="Notifications"
+              accessibilityRole="button">
+              <Ionicons
+                name="notifications-outline"
+                size={22}
+                color={Colors.text}
               />
-              {preview && !isGenerating && (
-                <View style={styles.preview}>
-                  <Image
-                    source={{ uri: preview.thumbnailUrl }}
-                    style={styles.previewThumb}
-                    resizeMode="cover"
-                  />
-                  <View style={styles.previewInfo}>
-                    <Text style={styles.previewTitle} numberOfLines={2}>
-                      {preview.title}
-                    </Text>
-                    <Text style={styles.previewChannel}>
-                      {preview.channelName}
-                    </Text>
-                  </View>
-                </View>
-              )}
-              {isGenerating ? (
-                <SummarizeProgress />
-              ) : (
-                <Pressable
-                  style={[
-                    styles.button,
-                    !url.trim() && styles.buttonDisabled,
-                  ]}
-                  onPress={handleSummarize}
-                  disabled={!url.trim()}>
-                  <Text style={styles.buttonText}>Summarize</Text>
-                </Pressable>
-              )}
-            </View>
-
-            {forYouSummaries.length > 0 && (
-              <View style={styles.forYouSection}>
-                <Text style={styles.sectionTitle}>Based on your interests</Text>
-                {forYouSummaries.slice(0, 3).map((item) => (
-                  <SummaryCard key={item.id} summary={item} />
-                ))}
-              </View>
-            )}
-
-            {summaries && summaries.length > 0 && (
-              <Text style={styles.sectionTitle}>Recent Summaries</Text>
-            )}
+            </Pressable>
           </View>
-        }
-        ListEmptyComponent={
-          isLoading ? (
-            <ActivityIndicator
-              color={Colors.primary}
-              style={styles.loader}
-            />
-          ) : (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyText}>
-                No summaries yet. Paste a YouTube URL above to get started.
-              </Text>
+
+          {/* Due cards banner */}
+          {dueCount > 0 && (
+            <Pressable
+              style={styles.dueBanner}
+              onPress={() => router.push('/review')}>
+              <View style={styles.dueBannerLeft}>
+                <Ionicons name="time" size={20} color="#fff" />
+                <Text style={styles.dueBannerText}>
+                  {dueCount} card{dueCount !== 1 ? 's' : ''} ready for review
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#fff" />
+            </Pressable>
+          )}
+
+          {/* For you section */}
+          {forYouSummaries.length > 0 && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Based on your interests</Text>
+              {forYouSummaries.slice(0, 3).map((item) => (
+                <SummaryCard key={item.id} summary={item} />
+              ))}
             </View>
-          )
-        }
-      />
-    </KeyboardAvoidingView>
+          )}
+
+          {summaries && summaries.length > 0 && (
+            <Text style={styles.sectionTitle}>Recent Summaries</Text>
+          )}
+        </View>
+      }
+      ListEmptyComponent={
+        isLoading ? (
+          <ActivityIndicator color={Colors.primary} style={styles.loader} />
+        ) : (
+          <View style={styles.emptyState}>
+            <Ionicons
+              name="videocam-outline"
+              size={48}
+              color={Colors.tabIconDefault}
+            />
+            <Text style={styles.emptyTitle}>No summaries yet</Text>
+            <Text style={styles.emptyText}>
+              Tap the + button above to analyse your first YouTube video.
+            </Text>
+          </View>
+        )
+      }
+    />
   );
 }
 
@@ -190,6 +124,32 @@ const styles = StyleSheet.create({
   },
   header: {
     marginBottom: 8,
+  },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
+  addButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  appTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  bellButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   dueBanner: {
     flexDirection: 'row',
@@ -210,67 +170,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
   },
-  greeting: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: Colors.text,
-    marginBottom: 24,
-  },
-  inputContainer: {
-    gap: 12,
-    marginBottom: 32,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 16,
-    color: Colors.text,
-    backgroundColor: Colors.surface,
-  },
-  button: {
-    backgroundColor: Colors.primary,
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-  },
-  buttonDisabled: {
-    opacity: 0.5,
-  },
-  buttonText: {
-    color: '#fff',
-    fontSize: 17,
-    fontWeight: '600',
-  },
-  preview: {
-    flexDirection: 'row',
-    backgroundColor: Colors.surface,
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  previewThumb: {
-    width: 100,
-    height: 70,
-    backgroundColor: Colors.border,
-  },
-  previewInfo: {
-    flex: 1,
-    padding: 10,
-    justifyContent: 'center',
-  },
-  previewTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.text,
-    lineHeight: 18,
-  },
-  previewChannel: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    marginTop: 3,
-  },
-  forYouSection: {
+  section: {
     marginBottom: 24,
   },
   sectionTitle: {
@@ -280,16 +180,21 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   emptyState: {
-    backgroundColor: Colors.surface,
-    borderRadius: 12,
-    padding: 24,
     alignItems: 'center',
+    paddingTop: 60,
+    gap: 12,
+  },
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: Colors.text,
   },
   emptyText: {
     color: Colors.textSecondary,
     fontSize: 15,
     textAlign: 'center',
     lineHeight: 22,
+    paddingHorizontal: 16,
   },
   loader: {
     marginTop: 40,

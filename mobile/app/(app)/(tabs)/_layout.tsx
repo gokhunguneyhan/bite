@@ -16,17 +16,17 @@ export default function TabLayout() {
         name="index"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home-outline" size={size} color={color} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons name={focused ? 'home' : 'home-outline'} size={size} color={color} />
           ),
         }}
       />
       <Tabs.Screen
-        name="library"
+        name="explore"
         options={{
-          title: 'Library',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="library-outline" size={size} color={color} />
+          title: 'Explore',
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons name={focused ? 'compass' : 'compass-outline'} size={size} color={color} />
           ),
         }}
       />
@@ -34,11 +34,22 @@ export default function TabLayout() {
         name="profile"
         options={{
           title: 'Profile',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="person-outline" size={size} color={color} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons name={focused ? 'person' : 'person-outline'} size={size} color={color} />
           ),
         }}
       />
+      <Tabs.Screen
+        name="more"
+        options={{
+          title: 'More',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="ellipsis-horizontal" size={size} color={color} />
+          ),
+        }}
+      />
+      {/* Hide library tab — functionality moves to Explore in Phase 3 */}
+      <Tabs.Screen name="library" options={{ href: null }} />
     </Tabs>
   );
 }
