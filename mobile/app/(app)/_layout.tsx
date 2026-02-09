@@ -85,6 +85,14 @@ export default function AppLayout() {
           options={{ title: 'Creator Profile', headerBackTitle: 'Back' }}
         />
         <Stack.Screen
+          name="following"
+          options={{ title: 'Following', headerBackTitle: 'Back' }}
+        />
+        <Stack.Screen
+          name="followers"
+          options={{ title: 'Followers', headerBackTitle: 'Back' }}
+        />
+        <Stack.Screen
           name="review"
           options={{ title: 'Review Cards', presentation: 'fullScreenModal' }}
         />

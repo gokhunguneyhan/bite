@@ -15,6 +15,10 @@ export interface Summary {
   originalLanguage: string;
   isPublic?: boolean;
   userId?: string;
+  isAnonymous?: boolean;
+  analystName?: string;
+  analystId?: string;
+  analysisCount?: number;
 }
 
 export const CATEGORIES = [
