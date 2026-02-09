@@ -8,7 +8,7 @@ const keepAliveAgent = new https.Agent({
 });
 
 const anthropic = new Anthropic({
-  timeout: 120_000,
+  timeout: 150_000,
   httpAgent: keepAliveAgent,
 });
 

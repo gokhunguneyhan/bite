@@ -20,7 +20,7 @@ app.get('/health', (_req, res) => {
 
 // Generate summary for a YouTube video
 app.post('/api/summarize', requireAuth, async (req, res) => {
-  req.setTimeout(120_000);
+  req.setTimeout(150_000);
   const { videoId } = req.body;
 
   if (!videoId || typeof videoId !== 'string') {
@@ -223,5 +223,5 @@ const server = app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
 
-server.timeout = 120_000;
-server.keepAliveTimeout = 120_000;
+server.timeout = 150_000;
+server.keepAliveTimeout = 150_000;

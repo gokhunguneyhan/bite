@@ -102,7 +102,7 @@ export async function generateSummary(videoId: string): Promise<Summary> {
       method: 'POST',
       body: { videoId },
       token: session?.access_token,
-      timeoutMs: 120_000,
+      timeoutMs: 150_000,
     });
 
     return summary;
