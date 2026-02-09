@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,13 +8,29 @@ import {
   ActivityIndicator,
   StyleSheet,
   Alert,
+  LayoutChangeEvent,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/src/constants/colors';
-import { useSummary, useCachedTranslation, useTranslateSummary, useTogglePublish, useIsSubscribed, useSubscribe, useUnsubscribe } from '@/src/hooks/useSummary';
+import {
+  useSummary,
+  useCachedTranslation,
+  useTranslateSummary,
+  useTogglePublish,
+  useIsSubscribed,
+  useSubscribe,
+  useUnsubscribe,
+  useCommunitySummaries,
+} from '@/src/hooks/useSummary';
 import { useSession } from '@/src/providers/SessionProvider';
 import { useSettingsStore, LANGUAGES } from '@/src/stores/settingsStore';
+import { ChannelInfoBlock } from '@/src/components/summary/ChannelInfoBlock';
+import { CommunityShareCallout } from '@/src/components/summary/CommunityShareCallout';
+import { SectionActions } from '@/src/components/summary/SectionActions';
+import { SectionNavigator } from '@/src/components/summary/SectionNavigator';
+import type { SectionKey } from '@/src/components/summary/SectionNavigator';
+import { VerticalVideoCard } from '@/src/components/summary/VerticalVideoCard';
 import type { Summary } from '@/src/types/summary';
 
 function formatTimestamp(seconds: number): string {
@@ -28,7 +44,10 @@ function formatTimestamp(seconds: number): string {
 }
 
 function getReadingTime(sections: { content: string }[]): string {
-  const words = sections.reduce((sum, s) => sum + s.content.split(/\s+/).length, 0);
+  const words = sections.reduce(
+    (sum, s) => sum + s.content.split(/\s+/).length,
+    0,
+  );
   const minutes = Math.max(1, Math.round(words / 200));
   return `${minutes} min read`;
 }
@@ -48,39 +67,44 @@ function getResourceIcon(type: string): keyof typeof Ionicons.glyphMap {
 export default function SummaryScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { data: summary, isLoading, error } = useSummary(id);
+  const { data: communitySummaries } = useCommunitySummaries();
   const { user } = useSession();
   const language = useSettingsStore((s) => s.language);
   const translateMutation = useTranslateSummary();
   const togglePublishMutation = useTogglePublish();
   const [showOriginal, setShowOriginal] = useState(false);
+  const [activeSection, setActiveSection] = useState<SectionKey>('summary');
+  // isAnonymous is local state for now — TODO: persist to Supabase
+  const [isAnonymous, setIsAnonymous] = useState(true);
+
+  const scrollRef = useRef<ScrollView>(null);
+  const sectionOffsets = useRef<Record<string, number>>({});
 
   const channelForSub = summary?.channelName ?? '';
   const { data: subscribed } = useIsSubscribed(channelForSub);
   const subscribeMutation = useSubscribe();
   const unsubscribeMutation = useUnsubscribe();
   const isFollowing = subscribed === true;
-  const isSubMutating = subscribeMutation.isPending || unsubscribeMutation.isPending;
+  const isSubMutating =
+    subscribeMutation.isPending || unsubscribeMutation.isPending;
 
   const isOwner = summary && user && summary.userId === user.id;
 
-  // Check if translation is needed
-  const needsTranslation = summary ? summary.originalLanguage !== language : false;
+  const needsTranslation = summary
+    ? summary.originalLanguage !== language
+    : false;
 
-  // Check for cached translation
-  const { data: cachedTranslation, isLoading: isCheckingCache } = useCachedTranslation(
-    summary?.id,
-    language,
-    needsTranslation,
-  );
+  const { data: cachedTranslation, isLoading: isCheckingCache } =
+    useCachedTranslation(summary?.id, language, needsTranslation);
 
-  // Translation is available if cached or just translated
-  const translatedContent = cachedTranslation || (translateMutation.isSuccess ? translateMutation.data : null);
+  const translatedContent =
+    cachedTranslation ||
+    (translateMutation.isSuccess ? translateMutation.data : null);
   const translationAvailable = translatedContent != null;
 
-  // Language label for button text
-  const langLabel = LANGUAGES.find((l) => l.code === language)?.label || language;
+  const langLabel =
+    LANGUAGES.find((l) => l.code === language)?.label || language;
 
-  // Merge translated content into summary for display
   const displaySummary = useMemo((): Summary | null => {
     if (!summary) return null;
     if (!needsTranslation || showOriginal || !translatedContent) return summary;
@@ -101,7 +125,8 @@ export default function SummaryScreen() {
             ...(t.refresherCards[i] ?? {}),
           }))
         : summary.refresherCards,
-      actionableInsights: t.actionableInsights ?? summary.actionableInsights,
+      actionableInsights:
+        t.actionableInsights ?? summary.actionableInsights,
       affiliateLinks: t.affiliateLinks
         ? summary.affiliateLinks.map((l, i) => ({
             ...l,
@@ -123,6 +148,34 @@ export default function SummaryScreen() {
     );
   };
 
+  // Similar summaries in same category
+  const similarSummaries = useMemo(() => {
+    if (!summary || !communitySummaries) return [];
+    return communitySummaries
+      .filter(
+        (s) =>
+          s.id !== summary.id &&
+          s.category &&
+          s.category === summary.category,
+      )
+      .slice(0, 5);
+  }, [summary, communitySummaries]);
+
+  const handleSectionLayout = useCallback(
+    (key: string) => (e: LayoutChangeEvent) => {
+      sectionOffsets.current[key] = e.nativeEvent.layout.y;
+    },
+    [],
+  );
+
+  const scrollToSection = useCallback((key: SectionKey) => {
+    setActiveSection(key);
+    const offset = sectionOffsets.current[key];
+    if (offset != null && scrollRef.current) {
+      scrollRef.current.scrollTo({ y: offset - 60, animated: true });
+    }
+  }, []);
+
   if (isLoading) {
     return (
       <View style={styles.centered}>
@@ -142,96 +195,45 @@ export default function SummaryScreen() {
     );
   }
 
-  const isShowingTranslation = needsTranslation && translationAvailable && !showOriginal;
+  const isShowingTranslation =
+    needsTranslation && translationAvailable && !showOriginal;
 
-  const speakerLinks = displaySummary?.affiliateLinks.filter((l) => l.category === 'by_speaker') ?? [];
-  const recommendedLinks = displaySummary?.affiliateLinks.filter((l) => l.category === 'recommended') ?? [];
+  const speakerLinks =
+    displaySummary.affiliateLinks.filter((l) => l.category === 'by_speaker');
+  const recommendedLinks =
+    displaySummary.affiliateLinks.filter((l) => l.category === 'recommended');
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.container} ref={scrollRef}>
+      {/* Thumbnail */}
       <Image
         source={{ uri: summary.thumbnailUrl }}
         style={styles.thumbnail}
         resizeMode="cover"
       />
 
+      {/* Video meta — preserved */}
       <View style={styles.videoMeta}>
         <Text style={styles.videoTitle}>{summary.videoTitle}</Text>
         <View style={styles.metaRow}>
-          <Pressable
-            onPress={() =>
-              router.push({
-                pathname: '/creator/[id]',
-                params: { id: summary.channelName },
-              })
-            }>
-            <Text style={styles.channelName}>{summary.channelName}</Text>
-          </Pressable>
-          {summary.channelName ? (
-            <Pressable
-              style={[
-                styles.followBadge,
-                isFollowing && styles.followBadgeActive,
-              ]}
-              onPress={() => {
-                if (isSubMutating) return;
-                if (isFollowing) {
-                  unsubscribeMutation.mutate(summary.channelName);
-                } else {
-                  subscribeMutation.mutate(summary.channelName);
-                }
-              }}
-              disabled={isSubMutating}>
-              <Text
-                style={[
-                  styles.followBadgeText,
-                  isFollowing && styles.followBadgeTextActive,
-                ]}>
-                {isFollowing ? 'Following' : 'Follow'}
-              </Text>
-            </Pressable>
-          ) : null}
           <Text style={styles.langBadge}>
-            {(summary.originalLanguage || summary.language || 'en').toUpperCase()}
+            {(
+              summary.originalLanguage ||
+              summary.language ||
+              'en'
+            ).toUpperCase()}
           </Text>
           {summary.category && summary.category !== 'Other' && (
             <Text style={styles.categoryTag}>{summary.category}</Text>
           )}
         </View>
-        {isOwner && (
-          <Pressable
-            style={[
-              styles.publishToggle,
-              summary.isPublic && styles.publishToggleActive,
-            ]}
-            disabled={togglePublishMutation.isPending}
-            onPress={() =>
-              togglePublishMutation.mutate({
-                id: summary.id,
-                isPublic: !summary.isPublic,
-              })
-            }>
-            <Ionicons
-              name={summary.isPublic ? 'earth' : 'earth-outline'}
-              size={14}
-              color={summary.isPublic ? '#fff' : Colors.textSecondary}
-            />
-            <Text
-              style={[
-                styles.publishToggleText,
-                summary.isPublic && styles.publishToggleTextActive,
-              ]}>
-              {togglePublishMutation.isPending
-                ? '...'
-                : summary.isPublic
-                  ? 'Shared to Community'
-                  : 'Share to Community'}
-            </Text>
-          </Pressable>
-        )}
         {isShowingTranslation && (
           <View style={styles.translationNotice}>
-            <Ionicons name="language-outline" size={14} color={Colors.primary} />
+            <Ionicons
+              name="language-outline"
+              size={14}
+              color={Colors.primary}
+            />
             <Text style={styles.translationText}>
               Translated from {summary.originalLanguage.toUpperCase()}
             </Text>
@@ -239,21 +241,47 @@ export default function SummaryScreen() {
         )}
       </View>
 
-      {/* Translate button / Show original toggle */}
+      {/* Channel Info Block */}
+      <View style={styles.blockSection}>
+        <ChannelInfoBlock
+          channelName={summary.channelName}
+          isFollowing={isFollowing}
+          isMutating={isSubMutating}
+          onToggleFollow={() => {
+            if (isSubMutating) return;
+            if (isFollowing) {
+              unsubscribeMutation.mutate(summary.channelName);
+            } else {
+              subscribeMutation.mutate(summary.channelName);
+            }
+          }}
+        />
+      </View>
+
+      {/* Translate button */}
       {needsTranslation && !isCheckingCache && (
-        <View style={styles.translateSection}>
+        <View style={styles.blockSection}>
           {translationAvailable ? (
             <Pressable
               style={styles.showOriginalToggle}
               onPress={() => setShowOriginal(!showOriginal)}>
-              <Ionicons name="swap-horizontal-outline" size={16} color={Colors.primary} />
+              <Ionicons
+                name="swap-horizontal-outline"
+                size={16}
+                color={Colors.primary}
+              />
               <Text style={styles.showOriginalText}>
-                {showOriginal ? `Show ${langLabel} translation` : 'Show original'}
+                {showOriginal
+                  ? `Show ${langLabel} translation`
+                  : 'Show original'}
               </Text>
             </Pressable>
           ) : (
             <Pressable
-              style={[styles.translateButton, translateMutation.isPending && styles.translateButtonLoading]}
+              style={[
+                styles.translateButton,
+                translateMutation.isPending && styles.translateButtonLoading,
+              ]}
               onPress={handleTranslate}
               disabled={translateMutation.isPending}>
               {translateMutation.isPending ? (
@@ -261,7 +289,9 @@ export default function SummaryScreen() {
               ) : (
                 <>
                   <Ionicons name="language-outline" size={18} color="#fff" />
-                  <Text style={styles.translateButtonText}>Translate to {langLabel}</Text>
+                  <Text style={styles.translateButtonText}>
+                    Translate to {langLabel}
+                  </Text>
                 </>
               )}
             </Pressable>
@@ -269,21 +299,60 @@ export default function SummaryScreen() {
         </View>
       )}
 
+      {/* Community Share Callout */}
+      <View style={styles.blockSection}>
+        {isOwner ? (
+          <CommunityShareCallout
+            isOwner
+            isPublic={summary.isPublic ?? false}
+            isAnonymous={isAnonymous}
+            isPending={togglePublishMutation.isPending}
+            onTogglePublic={() =>
+              togglePublishMutation.mutate({
+                id: summary.id,
+                isPublic: !summary.isPublic,
+              })
+            }
+            onToggleAnonymous={() => setIsAnonymous(!isAnonymous)}
+          />
+        ) : (
+          <CommunityShareCallout
+            isOwner={false}
+            analystName={undefined}
+            analysisCount={undefined}
+          />
+        )}
+      </View>
+
+      {/* Section Navigator */}
+      <SectionNavigator
+        activeSection={activeSection}
+        onPress={scrollToSection}
+      />
+
       {/* Quick Summary */}
-      <View style={styles.section}>
+      <View
+        style={styles.section}
+        onLayout={handleSectionLayout('summary')}>
         <View style={styles.sectionHeader}>
           <Ionicons name="flash-outline" size={18} color={Colors.primary} />
           <Text style={styles.sectionTitle}>Quick Summary</Text>
         </View>
-        <Text style={styles.quickSummaryText}>{displaySummary.quickSummary}</Text>
+        <Text style={styles.quickSummaryText}>
+          {displaySummary.quickSummary}
+        </Text>
       </View>
 
       {/* Contextual Summary */}
-      <View style={styles.section}>
+      <View
+        style={styles.section}
+        onLayout={handleSectionLayout('context')}>
         <View style={styles.sectionHeader}>
           <Ionicons name="book-outline" size={18} color={Colors.primary} />
           <Text style={styles.sectionTitle}>Contextual Summary</Text>
-          <Text style={styles.badge}>{getReadingTime(displaySummary.contextualSections)}</Text>
+          <Text style={styles.badge}>
+            {getReadingTime(displaySummary.contextualSections)}
+          </Text>
         </View>
         {displaySummary.contextualSections.map((section, index) => (
           <View key={index} style={styles.contextBlock}>
@@ -295,6 +364,14 @@ export default function SummaryScreen() {
               </Text>
             </View>
             <Text style={styles.contextContent}>{section.content}</Text>
+            <SectionActions
+              summaryId={summary.id}
+              sectionIndex={index}
+              sectionTitle={section.title}
+              sectionContent={section.content}
+              videoTitle={summary.videoTitle}
+              channelName={summary.channelName}
+            />
           </View>
         ))}
       </View>
@@ -311,7 +388,9 @@ export default function SummaryScreen() {
 
       {/* Actionable Insights */}
       {displaySummary.actionableInsights.length > 0 && (
-        <View style={styles.section}>
+        <View
+          style={styles.section}
+          onLayout={handleSectionLayout('insights')}>
           <View style={styles.sectionHeader}>
             <Ionicons
               name="checkmark-circle-outline"
@@ -334,7 +413,9 @@ export default function SummaryScreen() {
 
       {/* Books & Resources */}
       {displaySummary.affiliateLinks.length > 0 && (
-        <View style={styles.section}>
+        <View
+          style={styles.section}
+          onLayout={handleSectionLayout('resources')}>
           <View style={styles.sectionHeader}>
             <Ionicons
               name="bookmark-outline"
@@ -355,7 +436,9 @@ export default function SummaryScreen() {
               />
               <View style={{ flex: 1 }}>
                 <Text style={styles.affiliateTitle}>{link.title}</Text>
-                {link.author ? <Text style={styles.affiliateAuthor}>{link.author}</Text> : null}
+                {link.author ? (
+                  <Text style={styles.affiliateAuthor}>{link.author}</Text>
+                ) : null}
               </View>
               <Ionicons
                 name="open-outline"
@@ -376,7 +459,9 @@ export default function SummaryScreen() {
                   />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.affiliateTitle}>{link.title}</Text>
-                    {link.author ? <Text style={styles.affiliateAuthor}>{link.author}</Text> : null}
+                    {link.author ? (
+                      <Text style={styles.affiliateAuthor}>{link.author}</Text>
+                    ) : null}
                   </View>
                   <Ionicons
                     name="open-outline"
@@ -387,7 +472,8 @@ export default function SummaryScreen() {
               ))}
             </>
           )}
-          {speakerLinks.length === 0 && recommendedLinks.length === 0 &&
+          {speakerLinks.length === 0 &&
+            recommendedLinks.length === 0 &&
             displaySummary.affiliateLinks.map((link, index) => (
               <Pressable key={index} style={styles.affiliateCard}>
                 <Ionicons
@@ -397,7 +483,9 @@ export default function SummaryScreen() {
                 />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.affiliateTitle}>{link.title}</Text>
-                  {link.author ? <Text style={styles.affiliateAuthor}>{link.author}</Text> : null}
+                  {link.author ? (
+                    <Text style={styles.affiliateAuthor}>{link.author}</Text>
+                  ) : null}
                 </View>
                 <Ionicons
                   name="open-outline"
@@ -405,8 +493,25 @@ export default function SummaryScreen() {
                   color={Colors.tabIconDefault}
                 />
               </Pressable>
-            ))
-          }
+            ))}
+        </View>
+      )}
+
+      {/* You might also like */}
+      {similarSummaries.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.similarTitle}>You might also like</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.similarScroll}
+            contentContainerStyle={styles.similarContent}>
+            {similarSummaries.map((s) => (
+              <View key={s.id} style={styles.similarCard}>
+                <VerticalVideoCard summary={s} />
+              </View>
+            ))}
+          </ScrollView>
         </View>
       )}
 
@@ -453,13 +558,8 @@ const styles = StyleSheet.create({
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 6,
-    gap: 10,
-  },
-  channelName: {
-    fontSize: 15,
-    color: Colors.primary,
-    fontWeight: '500',
+    marginTop: 8,
+    gap: 8,
   },
   langBadge: {
     fontSize: 11,
@@ -481,51 +581,6 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     overflow: 'hidden',
   },
-  followBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Colors.primary,
-    backgroundColor: 'transparent',
-  },
-  followBadgeActive: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
-  followBadgeText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: Colors.primary,
-  },
-  followBadgeTextActive: {
-    color: '#fff',
-  },
-  publishToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: 6,
-    marginTop: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  publishToggleActive: {
-    backgroundColor: Colors.success,
-    borderColor: Colors.success,
-  },
-  publishToggleText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: Colors.textSecondary,
-  },
-  publishToggleTextActive: {
-    color: '#fff',
-  },
   translationNotice: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -542,9 +597,20 @@ const styles = StyleSheet.create({
     color: Colors.primary,
     fontWeight: '500',
   },
-  translateSection: {
+  blockSection: {
     paddingHorizontal: 20,
     paddingTop: 12,
+  },
+  showOriginalToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+  },
+  showOriginalText: {
+    fontSize: 13,
+    color: Colors.primary,
+    fontWeight: '500',
   },
   translateButton: {
     flexDirection: 'row',
@@ -562,17 +628,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
-  },
-  showOriginalToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    alignSelf: 'flex-start',
-  },
-  showOriginalText: {
-    fontSize: 13,
-    color: Colors.primary,
-    fontWeight: '500',
   },
   section: {
     paddingHorizontal: 20,
@@ -709,5 +764,21 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     marginBottom: 8,
     marginTop: 4,
+  },
+  similarTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: Colors.text,
+    marginBottom: 12,
+  },
+  similarScroll: {
+    marginHorizontal: -20,
+  },
+  similarContent: {
+    paddingHorizontal: 20,
+    gap: 12,
+  },
+  similarCard: {
+    width: 200,
   },
 });
