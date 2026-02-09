@@ -2,7 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import { fetchVideoMetadata, fetchTranscript } from './services/youtube.js';
-import { generateSummary } from './services/summarize.js';
+import { generateSummary, calculateTimeoutMs } from './services/summarize.js';
 import { translateSummaryContent } from './services/translate.js';
 import { requireAuth } from './middleware/auth.js';
 import { supabase } from './lib/supabase.js';
@@ -20,7 +20,6 @@ app.get('/health', (_req, res) => {
 
 // Generate summary for a YouTube video
 app.post('/api/summarize', requireAuth, async (req, res) => {
-  req.setTimeout(150_000);
   const { videoId } = req.body;
 
   if (!videoId || typeof videoId !== 'string') {
@@ -39,12 +38,15 @@ app.post('/api/summarize', requireAuth, async (req, res) => {
 
     const { text: transcript, languageCode: originalLanguage } = transcriptResult;
 
+    const timeoutMs = calculateTimeoutMs(transcript.length);
+    req.setTimeout(timeoutMs);
+
     console.log(
-      `[summarize] Got transcript (${transcript.length} chars, lang=${originalLanguage}) for "${metadata.title}"`,
+      `[summarize] Got transcript (${transcript.length} chars, lang=${originalLanguage}) for "${metadata.title}" — timeout ${timeoutMs / 1000}s`,
     );
 
     // Generate summary in the video's original language
-    const summary = await generateSummary(transcript, metadata.title);
+    const summary = await generateSummary(transcript, metadata.title, timeoutMs);
 
     console.log(`[summarize] Summary generated for "${metadata.title}"`);
 
@@ -188,6 +190,78 @@ app.post('/api/translate', requireAuth, async (req, res) => {
   }
 });
 
+// Toggle publish status for a summary
+app.post('/api/summaries/:id/publish', requireAuth, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    if (!supabase) {
+      res.status(500).json({ error: 'Database not configured' });
+      return;
+    }
+
+    // Fetch the summary and verify ownership
+    const { data: summary, error: fetchError } = await supabase
+      .from('summaries')
+      .select('id, user_id, is_public')
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !summary) {
+      res.status(404).json({ error: 'Summary not found' });
+      return;
+    }
+
+    if (summary.user_id !== req.user!.id) {
+      res.status(403).json({ error: 'Not authorized' });
+      return;
+    }
+
+    const newValue = !summary.is_public;
+    const { error: updateError } = await supabase
+      .from('summaries')
+      .update({ is_public: newValue })
+      .eq('id', id);
+
+    if (updateError) {
+      res.status(500).json({ error: 'Failed to update' });
+      return;
+    }
+
+    res.json({ isPublic: newValue });
+  } catch (error) {
+    console.error('[publish] Error:', error);
+    res.status(500).json({ error: 'Failed to toggle publish status' });
+  }
+});
+
+// Get public community summaries
+app.get('/api/community', async (_req, res) => {
+  try {
+    if (!supabase) {
+      res.status(500).json({ error: 'Database not configured' });
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('summaries')
+      .select('*')
+      .eq('is_public', true)
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    if (error) {
+      res.status(500).json({ error: 'Failed to fetch community summaries' });
+      return;
+    }
+
+    res.json((data ?? []).map(mapDbToSummary));
+  } catch (error) {
+    console.error('[community] Error:', error);
+    res.status(500).json({ error: 'Failed to fetch community summaries' });
+  }
+});
+
 // Fetch video metadata only (for preview)
 app.get('/api/video/:videoId', async (req, res) => {
   try {
@@ -223,5 +297,5 @@ const server = app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
 
-server.timeout = 150_000;
-server.keepAliveTimeout = 150_000;
+server.timeout = 600_000;
+server.keepAliveTimeout = 600_000;

@@ -12,7 +12,8 @@ import {
 import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/src/constants/colors';
-import { useSummary, useCachedTranslation, useTranslateSummary } from '@/src/hooks/useSummary';
+import { useSummary, useCachedTranslation, useTranslateSummary, useTogglePublish, useIsSubscribed, useSubscribe, useUnsubscribe } from '@/src/hooks/useSummary';
+import { useSession } from '@/src/providers/SessionProvider';
 import { useSettingsStore, LANGUAGES } from '@/src/stores/settingsStore';
 import type { Summary } from '@/src/types/summary';
 
@@ -43,9 +44,20 @@ function getResourceIcon(type: string): keyof typeof Ionicons.glyphMap {
 export default function SummaryScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { data: summary, isLoading, error } = useSummary(id);
+  const { user } = useSession();
   const language = useSettingsStore((s) => s.language);
   const translateMutation = useTranslateSummary();
+  const togglePublishMutation = useTogglePublish();
   const [showOriginal, setShowOriginal] = useState(false);
+
+  const channelForSub = summary?.channelName ?? '';
+  const { data: subscribed } = useIsSubscribed(channelForSub);
+  const subscribeMutation = useSubscribe();
+  const unsubscribeMutation = useUnsubscribe();
+  const isFollowing = subscribed === true;
+  const isSubMutating = subscribeMutation.isPending || unsubscribeMutation.isPending;
+
+  const isOwner = summary && user && summary.userId === user.id;
 
   // Check if translation is needed
   const needsTranslation = summary ? summary.originalLanguage !== language : false;
@@ -151,6 +163,30 @@ export default function SummaryScreen() {
             }>
             <Text style={styles.channelName}>{summary.channelName}</Text>
           </Pressable>
+          {summary.channelName ? (
+            <Pressable
+              style={[
+                styles.followBadge,
+                isFollowing && styles.followBadgeActive,
+              ]}
+              onPress={() => {
+                if (isSubMutating) return;
+                if (isFollowing) {
+                  unsubscribeMutation.mutate(summary.channelName);
+                } else {
+                  subscribeMutation.mutate(summary.channelName);
+                }
+              }}
+              disabled={isSubMutating}>
+              <Text
+                style={[
+                  styles.followBadgeText,
+                  isFollowing && styles.followBadgeTextActive,
+                ]}>
+                {isFollowing ? 'Following' : 'Follow'}
+              </Text>
+            </Pressable>
+          ) : null}
           <Text style={styles.langBadge}>
             {(summary.originalLanguage || summary.language || 'en').toUpperCase()}
           </Text>
@@ -158,6 +194,37 @@ export default function SummaryScreen() {
             <Text style={styles.categoryTag}>{summary.category}</Text>
           )}
         </View>
+        {isOwner && (
+          <Pressable
+            style={[
+              styles.publishToggle,
+              summary.isPublic && styles.publishToggleActive,
+            ]}
+            disabled={togglePublishMutation.isPending}
+            onPress={() =>
+              togglePublishMutation.mutate({
+                id: summary.id,
+                isPublic: !summary.isPublic,
+              })
+            }>
+            <Ionicons
+              name={summary.isPublic ? 'earth' : 'earth-outline'}
+              size={14}
+              color={summary.isPublic ? '#fff' : Colors.textSecondary}
+            />
+            <Text
+              style={[
+                styles.publishToggleText,
+                summary.isPublic && styles.publishToggleTextActive,
+              ]}>
+              {togglePublishMutation.isPending
+                ? '...'
+                : summary.isPublic
+                  ? 'Shared to Community'
+                  : 'Share to Community'}
+            </Text>
+          </Pressable>
+        )}
         {isShowingTranslation && (
           <View style={styles.translationNotice}>
             <Ionicons name="language-outline" size={14} color={Colors.primary} />
@@ -409,6 +476,51 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: 6,
     overflow: 'hidden',
+  },
+  followBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+    backgroundColor: 'transparent',
+  },
+  followBadgeActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  followBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: Colors.primary,
+  },
+  followBadgeTextActive: {
+    color: '#fff',
+  },
+  publishToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    marginTop: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  publishToggleActive: {
+    backgroundColor: Colors.success,
+    borderColor: Colors.success,
+  },
+  publishToggleText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.textSecondary,
+  },
+  publishToggleTextActive: {
+    color: '#fff',
   },
   translationNotice: {
     flexDirection: 'row',

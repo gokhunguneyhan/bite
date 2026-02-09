@@ -17,15 +17,25 @@ import { Colors } from '@/src/constants/colors';
 import { extractVideoId } from '@/src/services/youtube';
 import { useSummaries, useGenerateSummary } from '@/src/hooks/useSummary';
 import { useVideoPreview } from '@/src/hooks/useVideoPreview';
+import { usePreferences } from '@/src/hooks/usePreferences';
 import { SummaryCard } from '@/src/components/summary/SummaryCard';
 import { SummarizeProgress } from '@/src/components/summary/SummarizeProgress';
 
 export default function HomeScreen() {
   const [url, setUrl] = useState('');
   const { data: summaries, isLoading } = useSummaries();
+  const { data: preferences } = usePreferences();
   const generateMutation = useGenerateSummary();
   const videoId = useMemo(() => extractVideoId(url.trim()), [url]);
   const { data: preview } = useVideoPreview(videoId);
+
+  const forYouSummaries = useMemo(() => {
+    if (!summaries || !preferences?.preferredCategories?.length) return [];
+    const cats = preferences.preferredCategories.map((c) => c.toLowerCase());
+    return summaries.filter(
+      (s) => s.category && cats.includes(s.category.toLowerCase()),
+    );
+  }, [summaries, preferences?.preferredCategories]);
 
   const handleSummarize = () => {
     const videoId = extractVideoId(url.trim());
@@ -109,6 +119,15 @@ export default function HomeScreen() {
                 </Pressable>
               )}
             </View>
+
+            {forYouSummaries.length > 0 && (
+              <View style={styles.forYouSection}>
+                <Text style={styles.sectionTitle}>Based on your interests</Text>
+                {forYouSummaries.slice(0, 3).map((item) => (
+                  <SummaryCard key={item.id} summary={item} />
+                ))}
+              </View>
+            )}
 
             {summaries && summaries.length > 0 && (
               <Text style={styles.sectionTitle}>Recent Summaries</Text>
@@ -206,6 +225,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.textSecondary,
     marginTop: 3,
+  },
+  forYouSection: {
+    marginBottom: 24,
   },
   sectionTitle: {
     fontSize: 18,

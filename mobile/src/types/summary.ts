@@ -13,6 +13,8 @@ export interface Summary {
   createdAt: string;
   language: string;
   originalLanguage: string;
+  isPublic?: boolean;
+  userId?: string;
 }
 
 export const CATEGORIES = [
@@ -55,4 +57,10 @@ export interface AffiliateLink {
   url: string;
   type: 'book' | 'course' | 'tool' | 'website' | 'podcast';
   category: 'by_speaker' | 'recommended';
+}
+
+export interface CreatorSubscription {
+  id: string;
+  channelName: string;
+  createdAt: string;
 }

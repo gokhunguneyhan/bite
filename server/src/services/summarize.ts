@@ -7,9 +7,18 @@ const keepAliveAgent = new https.Agent({
 });
 
 const anthropic = new Anthropic({
-  timeout: 150_000,
   httpAgent: keepAliveAgent,
 });
+
+/**
+ * Calculate a timeout (ms) based on transcript length.
+ * ~1000 chars ≈ 1 minute of speech.
+ */
+export function calculateTimeoutMs(transcriptLength: number): number {
+  const estimatedMinutes = transcriptLength / 1000;
+  const seconds = Math.min(600, Math.max(120, Math.ceil(estimatedMinutes * 1.5) + 90));
+  return seconds * 1000;
+}
 
 export interface SummaryResult {
   quickSummary: string;
@@ -41,13 +50,14 @@ export interface SummaryResult {
 export async function generateSummary(
   transcript: string,
   videoTitle: string,
+  timeoutMs?: number,
 ): Promise<SummaryResult> {
   const prompt = `You are a Deep-Knowledge YouTube Summarizer that produces summaries enabling true knowledge transfer - not just listing topics, but explaining ideas with reasoning, stories, and context that make them memorable.
 
 Video title: "${videoTitle}"
 
 Transcript:
-${transcript.slice(0, 30000)}
+${transcript}
 
 ---
 
@@ -154,19 +164,34 @@ Return a JSON object with this exact structure (raw JSON only, no markdown):
 
 Write in the same language as the transcript.`;
 
-  const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-5-20250929',
-    max_tokens: 8192,
-    messages: [
-      {
-        role: 'user',
-        content: prompt,
-      },
-    ],
-  });
+  console.log(`[summarize] Sending ${transcript.length} chars (~${Math.round(transcript.length / 4)} tokens) to Claude`);
+
+  const requestTimeout = timeoutMs ?? calculateTimeoutMs(transcript.length);
+  console.log(`[summarize] Timeout set to ${requestTimeout / 1000}s`);
+
+  // Stream the response to keep the TCP connection alive during Claude's processing.
+  // Without streaming, the socket sits idle while Claude reads 40K+ tokens,
+  // and macOS kills it with ETIMEDOUT after ~120s of silence.
+  const stream = anthropic.messages.stream(
+    {
+      model: 'claude-sonnet-4-5-20250929',
+      max_tokens: 16384,
+      messages: [
+        {
+          role: 'user',
+          content: prompt,
+        },
+      ],
+    },
+    { timeout: requestTimeout },
+  );
+
+  const response = await stream.finalMessage();
 
   const text =
     response.content[0].type === 'text' ? response.content[0].text : '';
+
+  console.log(`[summarize] Claude response: ${text.length} chars, stop_reason=${response.stop_reason}, usage=${JSON.stringify(response.usage)}`);
 
   // Extract JSON from response (handle potential markdown wrapping)
   const jsonMatch = text.match(/\{[\s\S]*\}/);

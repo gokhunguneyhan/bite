@@ -52,6 +52,8 @@ function mapRow(row: Record<string, unknown>): Summary {
     createdAt: row.created_at as string,
     language: (row.language as string) || 'en',
     originalLanguage: (row.original_language as string) || (row.language as string) || 'en',
+    isPublic: (row.is_public as boolean) ?? false,
+    userId: row.user_id as string | undefined,
   };
 }
 
@@ -102,7 +104,7 @@ export async function generateSummary(videoId: string): Promise<Summary> {
       method: 'POST',
       body: { videoId },
       token: session?.access_token,
-      timeoutMs: 150_000,
+      timeoutMs: 600_000,
     });
 
     return summary;
@@ -130,6 +132,27 @@ export async function translateSummary(summaryId: string, targetLanguage: string
     body: { summaryId, targetLanguage },
     token: session?.access_token,
   });
+}
+
+export async function fetchCommunitySummaries(): Promise<Summary[]> {
+  const { data, error } = await supabase
+    .from('summaries')
+    .select('*')
+    .eq('is_public', true)
+    .order('created_at', { ascending: false })
+    .limit(50);
+
+  if (error) throw new Error(error.message);
+  return (data ?? []).map(mapRow);
+}
+
+export async function togglePublish(id: string, isPublic: boolean): Promise<void> {
+  const { error } = await supabase
+    .from('summaries')
+    .update({ is_public: isPublic })
+    .eq('id', id);
+
+  if (error) throw new Error(error.message);
 }
 
 export async function deleteSummary(id: string): Promise<void> {

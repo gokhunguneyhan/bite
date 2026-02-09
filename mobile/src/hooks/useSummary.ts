@@ -3,11 +3,19 @@ import {
   fetchSummaries,
   fetchSummary,
   fetchCachedTranslation,
+  fetchCommunitySummaries,
+  togglePublish,
   generateSummary,
   deleteSummary,
   fetchSummariesByChannel,
   translateSummary,
 } from '@/src/services/summaryService';
+import {
+  fetchSubscriptions,
+  subscribeToCreator,
+  unsubscribeFromCreator,
+  isSubscribed,
+} from '@/src/services/creatorService';
 
 export function useSummaries() {
   return useQuery({
@@ -55,6 +63,27 @@ export function useChannelSummaries(channelName: string) {
   });
 }
 
+export function useCommunitySummaries() {
+  return useQuery({
+    queryKey: ['community-summaries'],
+    queryFn: fetchCommunitySummaries,
+  });
+}
+
+export function useTogglePublish() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, isPublic }: { id: string; isPublic: boolean }) =>
+      togglePublish(id, isPublic),
+    onSuccess: (_data, { id }) => {
+      queryClient.invalidateQueries({ queryKey: ['summaries'] });
+      queryClient.invalidateQueries({ queryKey: ['community-summaries'] });
+      queryClient.invalidateQueries({ queryKey: ['summary', id] });
+    },
+  });
+}
+
 export function useDeleteSummary() {
   const queryClient = useQueryClient();
 
@@ -74,6 +103,45 @@ export function useTranslateSummary() {
       translateSummary(summaryId, targetLanguage),
     onSuccess: (data, { summaryId, targetLanguage }) => {
       queryClient.setQueryData(['cachedTranslation', summaryId, targetLanguage], data);
+    },
+  });
+}
+
+export function useSubscriptions() {
+  return useQuery({
+    queryKey: ['subscriptions'],
+    queryFn: fetchSubscriptions,
+  });
+}
+
+export function useIsSubscribed(channelName: string) {
+  return useQuery({
+    queryKey: ['subscribed', channelName],
+    queryFn: () => isSubscribed(channelName),
+    enabled: !!channelName,
+  });
+}
+
+export function useSubscribe() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (channelName: string) => subscribeToCreator(channelName),
+    onSuccess: (_data, channelName) => {
+      queryClient.invalidateQueries({ queryKey: ['subscriptions'] });
+      queryClient.setQueryData(['subscribed', channelName], true);
+    },
+  });
+}
+
+export function useUnsubscribe() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (channelName: string) => unsubscribeFromCreator(channelName),
+    onSuccess: (_data, channelName) => {
+      queryClient.invalidateQueries({ queryKey: ['subscriptions'] });
+      queryClient.setQueryData(['subscribed', channelName], false);
     },
   });
 }

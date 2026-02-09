@@ -2,19 +2,35 @@ import {
   View,
   Text,
   FlatList,
+  Pressable,
   ActivityIndicator,
   StyleSheet,
 } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/src/constants/colors';
-import { useChannelSummaries } from '@/src/hooks/useSummary';
+import { useChannelSummaries, useIsSubscribed, useSubscribe, useUnsubscribe } from '@/src/hooks/useSummary';
 import { SummaryCard } from '@/src/components/summary/SummaryCard';
 
 export default function CreatorScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const channelName = decodeURIComponent(id);
   const { data: summaries, isLoading } = useChannelSummaries(channelName);
+  const { data: subscribed } = useIsSubscribed(channelName);
+  const subscribeMutation = useSubscribe();
+  const unsubscribeMutation = useUnsubscribe();
+
+  const isFollowing = subscribed === true;
+  const isMutating = subscribeMutation.isPending || unsubscribeMutation.isPending;
+
+  const handleToggleFollow = () => {
+    if (isMutating) return;
+    if (isFollowing) {
+      unsubscribeMutation.mutate(channelName);
+    } else {
+      subscribeMutation.mutate(channelName);
+    }
+  };
 
   const initial = channelName?.charAt(0)?.toUpperCase() ?? 'C';
   const count = summaries?.length ?? 0;
@@ -35,6 +51,26 @@ export default function CreatorScreen() {
           <Text style={styles.stats}>
             {count} {count === 1 ? 'summary' : 'summaries'}
           </Text>
+          <Pressable
+            style={[
+              styles.followButton,
+              isFollowing && styles.followButtonActive,
+            ]}
+            onPress={handleToggleFollow}
+            disabled={isMutating}>
+            <Ionicons
+              name={isFollowing ? 'checkmark' : 'add'}
+              size={16}
+              color={isFollowing ? '#fff' : Colors.primary}
+            />
+            <Text
+              style={[
+                styles.followButtonText,
+                isFollowing && styles.followButtonTextActive,
+              ]}>
+              {isFollowing ? 'Following' : 'Follow'}
+            </Text>
+          </Pressable>
           <View style={styles.badges}>
             <View style={styles.badge}>
               <Ionicons
@@ -102,6 +138,30 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.textSecondary,
     marginTop: 4,
+  },
+  followButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 14,
+    paddingHorizontal: 20,
+    paddingVertical: 9,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: Colors.primary,
+    backgroundColor: 'transparent',
+  },
+  followButtonActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  followButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.primary,
+  },
+  followButtonTextActive: {
+    color: '#fff',
   },
   badges: {
     flexDirection: 'row',
