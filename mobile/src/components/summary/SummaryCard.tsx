@@ -9,6 +9,7 @@ interface SummaryCardProps {
 
 export function SummaryCard({ summary }: SummaryCardProps) {
   const timeAgo = getTimeAgo(summary.createdAt);
+  const langCode = (summary.originalLanguage || summary.language || 'en').toUpperCase();
 
   return (
     <Pressable
@@ -27,6 +28,7 @@ export function SummaryCard({ summary }: SummaryCardProps) {
           <Text style={styles.meta} numberOfLines={1}>
             {summary.channelName} · {timeAgo}
           </Text>
+          <Text style={styles.langBadge}>{langCode}</Text>
           {summary.category && summary.category !== 'Other' && (
             <Text style={styles.categoryBadge}>{summary.category}</Text>
           )}
@@ -85,6 +87,16 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.textSecondary,
     flexShrink: 1,
+  },
+  langBadge: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: Colors.textSecondary,
+    backgroundColor: Colors.border,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 3,
+    overflow: 'hidden',
   },
   categoryBadge: {
     fontSize: 10,

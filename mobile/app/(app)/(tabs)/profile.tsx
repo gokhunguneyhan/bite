@@ -7,7 +7,7 @@ import { useSettingsStore, LANGUAGES } from '@/src/stores/settingsStore';
 import { useSummaries } from '@/src/hooks/useSummary';
 
 export default function ProfileScreen() {
-  const { signOut } = useSession();
+  const { signOut, user, profile } = useSession();
   const { data: summaries } = useSummaries();
   const { language, setLanguage } = useSettingsStore();
   const [showLangPicker, setShowLangPicker] = useState(false);
@@ -15,14 +15,22 @@ export default function ProfileScreen() {
   const currentLang = LANGUAGES.find((l) => l.code === language);
   const summaryCount = summaries?.length ?? 0;
 
+  const displayName = profile?.full_name || user?.email?.split('@')[0] || 'User';
+  const displayEmail = user?.email || '';
+  const initial = displayName.charAt(0).toUpperCase();
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.header}>
         <View style={styles.avatar}>
-          <Text style={styles.avatarText}>U</Text>
+          <Text style={styles.avatarText}>{initial}</Text>
         </View>
-        <Text style={styles.name}>User</Text>
-        <Text style={styles.tier}>Free Plan</Text>
+        <Text style={styles.name}>{displayName}</Text>
+        {displayEmail ? (
+          <Text style={styles.tier}>{displayEmail}</Text>
+        ) : (
+          <Text style={styles.tier}>Free Plan</Text>
+        )}
       </View>
 
       <View style={styles.statsRow}>

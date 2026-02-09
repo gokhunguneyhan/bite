@@ -4,10 +4,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/src/constants/colors';
 
 const STEPS = [
-  { label: 'Fetching video info...', icon: 'videocam-outline' as const, duration: 2000 },
-  { label: 'Downloading transcript...', icon: 'document-text-outline' as const, duration: 3000 },
-  { label: 'Analyzing content...', icon: 'sparkles-outline' as const, duration: 5000 },
-  { label: 'Generating summary...', icon: 'create-outline' as const, duration: 10000 },
+  { label: 'Fetching video info...', icon: 'videocam-outline' as const, duration: 3000 },
+  { label: 'Downloading transcript...', icon: 'document-text-outline' as const, duration: 5000 },
+  { label: 'Analyzing content...', icon: 'sparkles-outline' as const, duration: 15000 },
+  { label: 'Generating summary...', icon: 'create-outline' as const, duration: 40000 },
+  { label: 'Building refresher cards...', icon: 'albums-outline' as const, duration: 40000 },
+  { label: 'Almost there...', icon: 'checkmark-circle-outline' as const, duration: 60000 },
 ];
 
 export function SummarizeProgress() {

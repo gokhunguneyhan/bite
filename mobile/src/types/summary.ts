@@ -7,11 +7,12 @@ export interface Summary {
   quickSummary: string;
   contextualSections: ContextualSection[];
   refresherCards: RefresherCard[];
-  actionableInsights: string[];
+  actionableInsights: ActionableInsight[];
   affiliateLinks: AffiliateLink[];
   category: string;
   createdAt: string;
   language: string;
+  originalLanguage: string;
 }
 
 export const CATEGORIES = [
@@ -38,13 +39,20 @@ export interface ContextualSection {
 
 export interface RefresherCard {
   id: string;
-  frontText: string;
-  backText: string;
+  title: string;
+  explanation: string;
   saved: boolean;
+}
+
+export interface ActionableInsight {
+  category: string;
+  insight: string;
 }
 
 export interface AffiliateLink {
   title: string;
+  author?: string;
   url: string;
-  type: 'book' | 'resource';
+  type: 'book' | 'course' | 'tool' | 'website' | 'podcast';
+  category: 'by_speaker' | 'recommended';
 }

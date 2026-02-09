@@ -39,6 +39,10 @@ mobile/android/
 server/node_modules/
 server/dist/
 .env
+*.env.local
+
+# Mobile env
+mobile/.env
 
 # Claude Code tooling (per-developer config)
 .claude/

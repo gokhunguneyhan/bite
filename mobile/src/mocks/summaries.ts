@@ -42,61 +42,66 @@ export const MOCK_SUMMARIES: Summary[] = [
     refresherCards: [
       {
         id: 'rc1',
-        frontText: 'What is the 1% rule?',
-        backText:
-          'Small daily improvements compound: 1% better each day = 37x better after one year. Focus on tiny changes, not big transformations.',
+        title: 'The 1% Rule',
+        explanation:
+          'James Clear argues that a 1% improvement each day leads to being 37x better after a year. The math is compelling, but the real insight is psychological: small changes don\'t trigger the resistance that ambitious goals do. The British cycling team proved this by going from mediocre to dominant — not through one big change, but by optimizing hundreds of tiny details, from pillow firmness to hand-washing technique.',
         saved: false,
       },
       {
         id: 'rc2',
-        frontText: 'What are identity-based habits?',
-        backText:
-          'Start with who you want to BE, not what you want to ACHIEVE. Every action is a vote for your desired identity. "I am a healthy person" beats "I want to lose 20 lbs."',
+        title: 'Identity-Based Habits',
+        explanation:
+          'Instead of starting with outcomes ("I want to lose weight") or processes ("I need to go to the gym"), Clear advocates starting with identity: "I am a healthy person." Every action becomes a vote for the type of person you want to be. This reframe shifts motivation from external rewards to internal alignment. You don\'t need willpower when your habits match who you believe you are.',
         saved: false,
       },
       {
         id: 'rc3',
-        frontText: 'What is the Two-Minute Rule?',
-        backText:
-          'Any new habit should take less than two minutes to start. "Read before bed" becomes "Read one page." The point is to master showing up before optimizing.',
+        title: 'The Two-Minute Rule',
+        explanation:
+          'Any new habit should take less than two minutes to start. "Read before bed" becomes "Read one page." "Do yoga" becomes "Roll out the mat." The point isn\'t the two minutes — it\'s mastering the art of showing up. Once you\'ve standardized showing up, you can optimize the details later. The hardest part of any habit is starting.',
         saved: false,
       },
       {
         id: 'rc4',
-        frontText: 'What is temptation bundling?',
-        backText:
-          'Pair a habit you NEED to do with something you WANT to do. Example: only listen to your favorite podcast while exercising.',
+        title: 'Temptation Bundling',
+        explanation:
+          'Pair a habit you NEED to do with something you WANT to do. Only listen to your favorite podcast while exercising. Only watch Netflix while on the treadmill. This leverages the brain\'s reward system by linking the dopamine hit of something enjoyable to the behavior you\'re trying to build. It transforms "I have to" into "I get to."',
         saved: false,
       },
       {
         id: 'rc5',
-        frontText: 'Why does environment matter more than willpower?',
-        backText:
-          'You fall to the level of your systems, not rise to the level of your goals. Disciplined people design environments that remove the need for discipline.',
+        title: 'Environment Design Over Willpower',
+        explanation:
+          'You don\'t rise to the level of your goals — you fall to the level of your systems. People who appear disciplined are often just better at structuring their environment. Put the guitar in the middle of the room, not in the closet. Lay out gym clothes the night before. The key insight: remove the need for willpower rather than trying to build more of it.',
         saved: false,
       },
     ],
     actionableInsights: [
-      'Audit your current habits using a habit scorecard \u2014 write down every daily behavior and mark it +, -, or =',
-      'Pick ONE tiny habit to start this week using the two-minute rule',
-      'Redesign one area of your environment to make a good habit easier (e.g., lay out gym clothes the night before)',
-      'Try temptation bundling: pair something you need to do with something you enjoy',
+      { category: 'tool', insight: 'Audit your current habits using a habit scorecard \u2014 write down every daily behavior and mark it +, -, or =' },
+      { category: 'habit', insight: 'Pick ONE tiny habit to start this week using the two-minute rule' },
+      { category: 'strategy', insight: 'Redesign one area of your environment to make a good habit easier (e.g., lay out gym clothes the night before)' },
+      { category: 'tool', insight: 'Try temptation bundling: pair something you need to do with something you enjoy' },
     ],
     affiliateLinks: [
       {
-        title: 'Atomic Habits by James Clear',
+        title: 'Atomic Habits',
+        author: 'James Clear',
         url: 'https://www.amazon.com/dp/0735211299',
         type: 'book',
+        category: 'by_speaker',
       },
       {
-        title: 'The Power of Habit by Charles Duhigg',
+        title: 'The Power of Habit',
+        author: 'Charles Duhigg',
         url: 'https://www.amazon.com/dp/081298160X',
         type: 'book',
+        category: 'recommended',
       },
     ],
     category: 'Self-improvement',
     createdAt: new Date().toISOString(),
     language: 'en',
+    originalLanguage: 'en',
   },
   {
     id: '2',
@@ -125,33 +130,36 @@ export const MOCK_SUMMARIES: Summary[] = [
     refresherCards: [
       {
         id: 'rc6',
-        frontText: 'Why is "no one crazy" with money?',
-        backText:
-          'Everyone\'s financial decisions are shaped by their unique life experiences. What seems irrational to you may be perfectly logical given someone else\'s background.',
+        title: 'No One Is Crazy With Money',
+        explanation:
+          'Everyone makes financial decisions based on their unique experiences. Someone who grew up during hyperinflation views money fundamentally differently than someone raised in stable prosperity. Neither is wrong — they\'re both responding rationally to their lived experience. This explains why financial advice that seems obvious to one person feels impossible to another.',
         saved: false,
       },
       {
         id: 'rc7',
-        frontText: 'What makes compounding so powerful?',
-        backText:
-          '$81.5B of Buffett\'s $84.5B net worth came after age 50. Time is more important than returns. Consistency over decades beats brilliance over years.',
+        title: 'The Power of Compounding',
+        explanation:
+          'Warren Buffett\'s net worth is $84.5 billion. Of that, $84.2 billion came after his 50th birthday — and he started investing at age 10. The key isn\'t getting extraordinary returns; it\'s time. A pretty good investor who starts early and stays consistent will outperform a brilliant investor who starts late. Compounding rewards patience above all else.',
         saved: false,
       },
     ],
     actionableInsights: [
-      'Define your "enough" \u2014 write down what financial goalpost would let you stop chasing more',
-      'Calculate how much time you have in the market, not timing the market',
+      { category: 'mindset', insight: 'Define your "enough" \u2014 write down what financial goalpost would let you stop chasing more' },
+      { category: 'strategy', insight: 'Calculate how much time you have in the market, not timing the market' },
     ],
     affiliateLinks: [
       {
-        title: 'The Psychology of Money by Morgan Housel',
+        title: 'The Psychology of Money',
+        author: 'Morgan Housel',
         url: 'https://www.amazon.com/dp/0857197681',
         type: 'book',
+        category: 'by_speaker',
       },
     ],
     category: 'Finance',
     createdAt: new Date(Date.now() - 86400000).toISOString(),
     language: 'en',
+    originalLanguage: 'en',
   },
 ];
 

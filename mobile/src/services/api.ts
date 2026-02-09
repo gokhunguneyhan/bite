@@ -5,6 +5,7 @@ interface RequestOptions {
   body?: unknown;
   headers?: Record<string, string>;
   token?: string | null;
+  timeoutMs?: number;
 }
 
 class ApiError extends Error {
@@ -21,7 +22,7 @@ export async function apiRequest<T>(
   endpoint: string,
   options: RequestOptions = {},
 ): Promise<T> {
-  const { method = 'GET', body, headers = {}, token } = options;
+  const { method = 'GET', body, headers = {}, token, timeoutMs = 60_000 } = options;
 
   const requestHeaders: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -32,18 +33,26 @@ export async function apiRequest<T>(
     requestHeaders['Authorization'] = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-    method,
-    headers: requestHeaders,
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => 'Unknown error');
-    throw new ApiError(response.status, errorText);
+  try {
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      method,
+      headers: requestHeaders,
+      body: body ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => 'Unknown error');
+      throw new ApiError(response.status, errorText);
+    }
+
+    return response.json();
+  } finally {
+    clearTimeout(timeoutId);
   }
-
-  return response.json();
 }
 
 export { ApiError };

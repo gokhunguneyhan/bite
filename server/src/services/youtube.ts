@@ -9,6 +9,11 @@ interface VideoMetadata {
   thumbnailUrl: string;
 }
 
+interface TranscriptResult {
+  text: string;
+  languageCode: string;
+}
+
 export async function fetchVideoMetadata(
   videoId: string,
 ): Promise<VideoMetadata> {
@@ -28,7 +33,7 @@ export async function fetchVideoMetadata(
   };
 }
 
-export async function fetchTranscript(videoId: string): Promise<string> {
+export async function fetchTranscript(videoId: string): Promise<TranscriptResult> {
   // Validate videoId format to prevent injection
   if (!/^[a-zA-Z0-9_-]{11}$/.test(videoId)) {
     throw new Error('Invalid video ID format');
@@ -45,7 +50,7 @@ try:
     ytt_api = YouTubeTranscriptApi()
     transcript = ytt_api.fetch(video_id)
     text = ' '.join([entry.text for entry in transcript.snippets])
-    print(json.dumps({"ok": True, "text": text}))
+    print(json.dumps({"ok": True, "text": text, "languageCode": transcript.language_code}))
 except Exception as e:
     print(json.dumps({"ok": False, "error": str(e)}))
 `,
@@ -62,7 +67,10 @@ except Exception as e:
       throw new Error('No transcript available: empty transcript returned');
     }
 
-    return result.text;
+    return {
+      text: result.text,
+      languageCode: result.languageCode || 'en',
+    };
   } catch (error: any) {
     if (error.message?.includes('No transcript')) {
       throw error;

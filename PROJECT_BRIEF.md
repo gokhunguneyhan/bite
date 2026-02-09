@@ -1,7 +1,7 @@
 # YouTube Summarizer App - Project Brief
 
-**Last Updated:** February 6, 2026
-**Status:** Pre-MVP Development
+**Last Updated:** February 7, 2026
+**Status:** MVP Development
 **Related Files:** `COMPETITOR_ANALYSIS_REPORT.md`, `QUICK_SUMMARY.md`
 
 ---
@@ -47,7 +47,7 @@ A YouTube summarizer iOS app that transforms how busy professionals consume vide
 | Midday/lunch (10am-3pm) | ✅ | 32% of podcast listening happens here |
 | Evening wind-down (6-10pm) | ✅ | Couch/bed time |
 | Before sleep | ✅ | Skews older demographic |
-| Commuting | ⚠️ | Needs audio summaries (V2) |
+| Commuting | ✅ | Audio summaries (MVP) |
 | Working out | ❌ | Not ideal for reading |
 
 ---
@@ -79,7 +79,6 @@ A YouTube summarizer iOS app that transforms how busy professionals consume vide
 | Feature | Notes |
 |---------|-------|
 | YouTube URL input | Core functionality |
-| Other URL input | Best effort, fail gracefully |
 | Subscribe to Creators/Categories | Follow channels, get notified, auto-summarize option |
 
 #### Output
@@ -90,7 +89,8 @@ A YouTube summarizer iOS app that transforms how busy professionals consume vide
 | Refresher Cards | Tinder-style swipe to save, shareable |
 | Actionable Insights | End of summary section |
 | Books/Resources + Affiliate | Amazon links for monetization |
-| Translation | Output in user's preferred language |
+| Translation | User-initiated, cached per language |
+| Audio Summaries | High-quality TTS for commuters, listen on the go |
 
 #### Platform Features
 | Feature | Notes |
@@ -98,7 +98,9 @@ A YouTube summarizer iOS app that transforms how busy professionals consume vide
 | Community Library | Public summaries, read with limits |
 | Offline Mode | Download for reading |
 | Basic Creator Profiles | Stats, "rewards coming" teaser |
-| User Profile (onboarding) | Personalization Level 1 |
+| Personalised Onboarding | Interests, goals, age, preferred categories, learning style |
+| Social Login | Google + Apple Sign-In (alongside email) |
+| Subscription Tiers & Usage Limits | Free / Pro / Power tiers with credit-based limits |
 | Fail gracefully (no captions) | "Captions unavailable - coming soon" message |
 
 ---
@@ -108,6 +110,10 @@ A YouTube summarizer iOS app that transforms how busy professionals consume vide
 | Feature | Notes |
 |---------|-------|
 | Whisper transcription | "No captions? Costs 2 credits" |
+| Other URL / file upload | Non-YouTube URLs, custom video/audio upload |
+| Confidence Scores | Per-section accuracy indicators |
+| AI Chat follow-up | Ask questions about the video |
+| Multi-model validation | Pro/Power tier - GPT-4 + Claude cross-check |
 | "Make it Yours" | Personalization Level 2 |
 | Enhanced notifications | Smarter digest, preferences |
 
@@ -118,11 +124,7 @@ A YouTube summarizer iOS app that transforms how busy professionals consume vide
 | Feature | Notes |
 |---------|-------|
 | Android app | React Native cross-platform |
-| Audio Summaries | High-quality TTS (for commuters) |
-| Confidence Scores | Per-section accuracy indicators |
 | Export (PDF, Markdown) | Power users |
-| AI Chat follow-up | Ask questions about the video |
-| Multi-model validation | Pro/Power tier - GPT-4 + Claude cross-check |
 
 ---
 
@@ -130,7 +132,6 @@ A YouTube summarizer iOS app that transforms how busy professionals consume vide
 
 | Feature | Notes |
 |---------|-------|
-| Upload video/audio | Full transcription pipeline |
 | Anki export | Education market |
 | Team plans / B2B | Shared libraries |
 | Creator rewards program | Revenue share |
@@ -241,11 +242,14 @@ A YouTube summarizer iOS app that transforms how busy professionals consume vide
 ### Must Have (Launch Blockers)
 1. YouTube URL input → Contextual Summary generation
 2. Quick Summary (30s version)
-3. Basic user accounts
-4. Community Library (public summaries)
-5. Refresher Cards UI
-6. Offline reading mode
-7. Basic onboarding flow
+3. User accounts (email + social login)
+4. Subscription tiers & usage limits (Free / Pro / Power)
+5. Personalised onboarding (interests, goals, age, categories)
+6. Community Library (public summaries)
+7. Refresher Cards UI
+8. Audio Summaries (TTS)
+9. Offline reading mode
+10. Basic onboarding flow
 
 ### Should Have (Week 1-2 Post-Launch)
 1. Creator subscriptions
@@ -255,8 +259,12 @@ A YouTube summarizer iOS app that transforms how busy professionals consume vide
 
 ### Nice to Have (V1.5)
 1. Whisper transcription (no captions)
-2. Personalization ("Make it Yours")
-3. Enhanced notification preferences
+2. Other URL / file upload
+3. Confidence Scores
+4. AI Chat follow-up
+5. Multi-model validation
+6. Personalization Level 2 ("Make it Yours")
+7. Enhanced notification preferences
 
 ---
 
@@ -265,7 +273,7 @@ A YouTube summarizer iOS app that transforms how busy professionals consume vide
 ### API Considerations
 - YouTube transcript API for captions
 - Claude API for summarization (primary)
-- GPT-4 for multi-model validation (V2)
+- GPT-4 for multi-model validation (V1.5)
 - Whisper API for transcription (V1.5)
 
 ### Key UX Principles

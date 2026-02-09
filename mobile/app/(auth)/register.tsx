@@ -1,19 +1,38 @@
-import { View, Text, TextInput, Pressable, StyleSheet } from 'react-native';
+import { View, Text, TextInput, Pressable, Alert, ActivityIndicator, StyleSheet } from 'react-native';
 import { useState } from 'react';
 import { router } from 'expo-router';
 import { useSession } from '@/src/providers/SessionProvider';
 import { Colors } from '@/src/constants/colors';
 
 export default function RegisterScreen() {
-  const { signIn } = useSession();
+  const { signUp } = useSession();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleRegister = () => {
-    // TODO: Replace with real API call
-    signIn('mock-session-token');
-    router.replace('/');
+  const handleRegister = async () => {
+    if (!name.trim() || !email.trim() || !password) {
+      Alert.alert('Missing fields', 'Please fill in all fields.');
+      return;
+    }
+    if (password.length < 6) {
+      Alert.alert('Weak password', 'Password must be at least 6 characters.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await signUp(email.trim(), password, name.trim());
+      // With email confirmation disabled, signUp auto-signs in.
+      // Session will be picked up by onAuthStateChange in SessionProvider.
+      router.replace('/');
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Registration failed';
+      Alert.alert('Registration failed', message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -32,6 +51,7 @@ export default function RegisterScreen() {
           value={name}
           onChangeText={setName}
           placeholderTextColor={Colors.tabIconDefault}
+          editable={!loading}
         />
         <TextInput
           style={styles.input}
@@ -41,17 +61,26 @@ export default function RegisterScreen() {
           autoCapitalize="none"
           keyboardType="email-address"
           placeholderTextColor={Colors.tabIconDefault}
+          editable={!loading}
         />
         <TextInput
           style={styles.input}
-          placeholder="Password"
+          placeholder="Password (min 6 characters)"
           value={password}
           onChangeText={setPassword}
           secureTextEntry
           placeholderTextColor={Colors.tabIconDefault}
+          editable={!loading}
         />
-        <Pressable style={styles.button} onPress={handleRegister}>
-          <Text style={styles.buttonText}>Create Account</Text>
+        <Pressable
+          style={[styles.button, loading && styles.buttonDisabled]}
+          onPress={handleRegister}
+          disabled={loading}>
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.buttonText}>Create Account</Text>
+          )}
         </Pressable>
       </View>
 
@@ -107,6 +136,9 @@ const styles = StyleSheet.create({
     padding: 18,
     alignItems: 'center',
     marginTop: 8,
+  },
+  buttonDisabled: {
+    opacity: 0.7,
   },
   buttonText: {
     color: '#fff',

@@ -1,3 +1,4 @@
+import { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -6,11 +7,14 @@ import {
   Pressable,
   ActivityIndicator,
   StyleSheet,
+  Alert,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/src/constants/colors';
-import { useSummary } from '@/src/hooks/useSummary';
+import { useSummary, useCachedTranslation, useTranslateSummary } from '@/src/hooks/useSummary';
+import { useSettingsStore, LANGUAGES } from '@/src/stores/settingsStore';
+import type { Summary } from '@/src/types/summary';
 
 function formatTimestamp(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -18,9 +22,90 @@ function formatTimestamp(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+function getReadingTime(sections: { content: string }[]): string {
+  const words = sections.reduce((sum, s) => sum + s.content.split(/\s+/).length, 0);
+  const minutes = Math.max(1, Math.round(words / 200));
+  return `${minutes} min read`;
+}
+
+const RESOURCE_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
+  book: 'book',
+  course: 'school-outline',
+  tool: 'construct-outline',
+  website: 'globe-outline',
+  podcast: 'mic-outline',
+};
+
+function getResourceIcon(type: string): keyof typeof Ionicons.glyphMap {
+  return RESOURCE_ICONS[type] || 'link';
+}
+
 export default function SummaryScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { data: summary, isLoading, error } = useSummary(id);
+  const language = useSettingsStore((s) => s.language);
+  const translateMutation = useTranslateSummary();
+  const [showOriginal, setShowOriginal] = useState(false);
+
+  // Check if translation is needed
+  const needsTranslation = summary ? summary.originalLanguage !== language : false;
+
+  // Check for cached translation
+  const { data: cachedTranslation, isLoading: isCheckingCache } = useCachedTranslation(
+    summary?.id,
+    language,
+    needsTranslation,
+  );
+
+  // Translation is available if cached or just translated
+  const translatedContent = cachedTranslation || (translateMutation.isSuccess ? translateMutation.data : null);
+  const translationAvailable = translatedContent != null;
+
+  // Language label for button text
+  const langLabel = LANGUAGES.find((l) => l.code === language)?.label || language;
+
+  // Merge translated content into summary for display
+  const displaySummary = useMemo((): Summary | null => {
+    if (!summary) return null;
+    if (!needsTranslation || showOriginal || !translatedContent) return summary;
+
+    const t = translatedContent as Record<string, any>;
+    return {
+      ...summary,
+      quickSummary: t.quickSummary ?? summary.quickSummary,
+      contextualSections: t.contextualSections
+        ? summary.contextualSections.map((s, i) => ({
+            ...s,
+            ...(t.contextualSections[i] ?? {}),
+          }))
+        : summary.contextualSections,
+      refresherCards: t.refresherCards
+        ? summary.refresherCards.map((c, i) => ({
+            ...c,
+            ...(t.refresherCards[i] ?? {}),
+          }))
+        : summary.refresherCards,
+      actionableInsights: t.actionableInsights ?? summary.actionableInsights,
+      affiliateLinks: t.affiliateLinks
+        ? summary.affiliateLinks.map((l, i) => ({
+            ...l,
+            ...(t.affiliateLinks[i] ?? {}),
+          }))
+        : summary.affiliateLinks,
+      language,
+    };
+  }, [summary, needsTranslation, showOriginal, translatedContent, language]);
+
+  const handleTranslate = () => {
+    translateMutation.mutate(
+      { summaryId: id, targetLanguage: language },
+      {
+        onError: (err: Error) => {
+          Alert.alert('Translation failed', err.message);
+        },
+      },
+    );
+  };
 
   if (isLoading) {
     return (
@@ -30,7 +115,7 @@ export default function SummaryScreen() {
     );
   }
 
-  if (error || !summary) {
+  if (error || !summary || !displaySummary) {
     return (
       <View style={styles.centered}>
         <Text style={styles.errorText}>Summary not found</Text>
@@ -40,6 +125,11 @@ export default function SummaryScreen() {
       </View>
     );
   }
+
+  const isShowingTranslation = needsTranslation && translationAvailable && !showOriginal;
+
+  const speakerLinks = displaySummary?.affiliateLinks.filter((l) => l.category === 'by_speaker') ?? [];
+  const recommendedLinks = displaySummary?.affiliateLinks.filter((l) => l.category === 'recommended') ?? [];
 
   return (
     <ScrollView style={styles.container}>
@@ -61,20 +151,60 @@ export default function SummaryScreen() {
             }>
             <Text style={styles.channelName}>{summary.channelName}</Text>
           </Pressable>
+          <Text style={styles.langBadge}>
+            {(summary.originalLanguage || summary.language || 'en').toUpperCase()}
+          </Text>
           {summary.category && summary.category !== 'Other' && (
             <Text style={styles.categoryTag}>{summary.category}</Text>
           )}
         </View>
+        {isShowingTranslation && (
+          <View style={styles.translationNotice}>
+            <Ionicons name="language-outline" size={14} color={Colors.primary} />
+            <Text style={styles.translationText}>
+              Translated from {summary.originalLanguage.toUpperCase()}
+            </Text>
+          </View>
+        )}
       </View>
+
+      {/* Translate button / Show original toggle */}
+      {needsTranslation && !isCheckingCache && (
+        <View style={styles.translateSection}>
+          {translationAvailable ? (
+            <Pressable
+              style={styles.showOriginalToggle}
+              onPress={() => setShowOriginal(!showOriginal)}>
+              <Ionicons name="swap-horizontal-outline" size={16} color={Colors.primary} />
+              <Text style={styles.showOriginalText}>
+                {showOriginal ? `Show ${langLabel} translation` : 'Show original'}
+              </Text>
+            </Pressable>
+          ) : (
+            <Pressable
+              style={[styles.translateButton, translateMutation.isPending && styles.translateButtonLoading]}
+              onPress={handleTranslate}
+              disabled={translateMutation.isPending}>
+              {translateMutation.isPending ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <>
+                  <Ionicons name="language-outline" size={18} color="#fff" />
+                  <Text style={styles.translateButtonText}>Translate to {langLabel}</Text>
+                </>
+              )}
+            </Pressable>
+          )}
+        </View>
+      )}
 
       {/* Quick Summary */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Ionicons name="flash-outline" size={18} color={Colors.primary} />
           <Text style={styles.sectionTitle}>Quick Summary</Text>
-          <Text style={styles.badge}>30s read</Text>
         </View>
-        <Text style={styles.quickSummaryText}>{summary.quickSummary}</Text>
+        <Text style={styles.quickSummaryText}>{displaySummary.quickSummary}</Text>
       </View>
 
       {/* Contextual Summary */}
@@ -82,8 +212,9 @@ export default function SummaryScreen() {
         <View style={styles.sectionHeader}>
           <Ionicons name="book-outline" size={18} color={Colors.primary} />
           <Text style={styles.sectionTitle}>Contextual Summary</Text>
+          <Text style={styles.badge}>{getReadingTime(displaySummary.contextualSections)}</Text>
         </View>
-        {summary.contextualSections.map((section, index) => (
+        {displaySummary.contextualSections.map((section, index) => (
           <View key={index} style={styles.contextBlock}>
             <View style={styles.contextHeader}>
               <Text style={styles.contextTitle}>{section.title}</Text>
@@ -103,12 +234,12 @@ export default function SummaryScreen() {
         onPress={() => router.push(`/refresher/${id}`)}>
         <Ionicons name="albums-outline" size={20} color="#fff" />
         <Text style={styles.refresherButtonText}>
-          Start Refresher Cards ({summary.refresherCards.length})
+          Start Refresher Cards ({displaySummary.refresherCards.length})
         </Text>
       </Pressable>
 
       {/* Actionable Insights */}
-      {summary.actionableInsights.length > 0 && (
+      {displaySummary.actionableInsights.length > 0 && (
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Ionicons
@@ -118,17 +249,20 @@ export default function SummaryScreen() {
             />
             <Text style={styles.sectionTitle}>Actionable Insights</Text>
           </View>
-          {summary.actionableInsights.map((insight, index) => (
+          {displaySummary.actionableInsights.map((item, index) => (
             <View key={index} style={styles.insightRow}>
               <Text style={styles.insightNumber}>{index + 1}</Text>
-              <Text style={styles.insightText}>{insight}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.insightCategory}>{item.category}</Text>
+                <Text style={styles.insightText}>{item.insight}</Text>
+              </View>
             </View>
           ))}
         </View>
       )}
 
       {/* Books & Resources */}
-      {summary.affiliateLinks.length > 0 && (
+      {displaySummary.affiliateLinks.length > 0 && (
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Ionicons
@@ -138,14 +272,20 @@ export default function SummaryScreen() {
             />
             <Text style={styles.sectionTitle}>Books & Resources</Text>
           </View>
-          {summary.affiliateLinks.map((link, index) => (
-            <Pressable key={index} style={styles.affiliateCard}>
+          {speakerLinks.length > 0 && recommendedLinks.length > 0 && (
+            <Text style={styles.resourceGroupLabel}>Mentioned in video</Text>
+          )}
+          {speakerLinks.map((link, index) => (
+            <Pressable key={`s-${index}`} style={styles.affiliateCard}>
               <Ionicons
-                name={link.type === 'book' ? 'book' : 'link'}
+                name={getResourceIcon(link.type)}
                 size={20}
                 color={Colors.textSecondary}
               />
-              <Text style={styles.affiliateTitle}>{link.title}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.affiliateTitle}>{link.title}</Text>
+                {link.author ? <Text style={styles.affiliateAuthor}>{link.author}</Text> : null}
+              </View>
               <Ionicons
                 name="open-outline"
                 size={16}
@@ -153,6 +293,49 @@ export default function SummaryScreen() {
               />
             </Pressable>
           ))}
+          {recommendedLinks.length > 0 && (
+            <>
+              <Text style={styles.resourceGroupLabel}>Related resources</Text>
+              {recommendedLinks.map((link, index) => (
+                <Pressable key={`r-${index}`} style={styles.affiliateCard}>
+                  <Ionicons
+                    name={getResourceIcon(link.type)}
+                    size={20}
+                    color={Colors.textSecondary}
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.affiliateTitle}>{link.title}</Text>
+                    {link.author ? <Text style={styles.affiliateAuthor}>{link.author}</Text> : null}
+                  </View>
+                  <Ionicons
+                    name="open-outline"
+                    size={16}
+                    color={Colors.tabIconDefault}
+                  />
+                </Pressable>
+              ))}
+            </>
+          )}
+          {speakerLinks.length === 0 && recommendedLinks.length === 0 &&
+            displaySummary.affiliateLinks.map((link, index) => (
+              <Pressable key={index} style={styles.affiliateCard}>
+                <Ionicons
+                  name={getResourceIcon(link.type)}
+                  size={20}
+                  color={Colors.textSecondary}
+                />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.affiliateTitle}>{link.title}</Text>
+                  {link.author ? <Text style={styles.affiliateAuthor}>{link.author}</Text> : null}
+                </View>
+                <Ionicons
+                  name="open-outline"
+                  size={16}
+                  color={Colors.tabIconDefault}
+                />
+              </Pressable>
+            ))
+          }
         </View>
       )}
 
@@ -207,6 +390,16 @@ const styles = StyleSheet.create({
     color: Colors.primary,
     fontWeight: '500',
   },
+  langBadge: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Colors.textSecondary,
+    backgroundColor: Colors.border,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
   categoryTag: {
     fontSize: 12,
     fontWeight: '600',
@@ -216,6 +409,54 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: 6,
     overflow: 'hidden',
+  },
+  translationNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+    backgroundColor: Colors.primary + '10',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+  },
+  translationText: {
+    fontSize: 12,
+    color: Colors.primary,
+    fontWeight: '500',
+  },
+  translateSection: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
+  },
+  translateButton: {
+    flexDirection: 'row',
+    backgroundColor: Colors.primary,
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  translateButtonLoading: {
+    opacity: 0.7,
+  },
+  translateButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  showOriginalToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+  },
+  showOriginalText: {
+    fontSize: 13,
+    color: Colors.primary,
+    fontWeight: '500',
   },
   section: {
     paddingHorizontal: 20,
@@ -312,8 +553,15 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     overflow: 'hidden',
   },
+  insightCategory: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: Colors.primary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
   insightText: {
-    flex: 1,
     fontSize: 15,
     color: Colors.text,
     lineHeight: 22,
@@ -328,9 +576,22 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   affiliateTitle: {
-    flex: 1,
     fontSize: 15,
     color: Colors.text,
     fontWeight: '500',
+  },
+  affiliateAuthor: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+    marginTop: 2,
+  },
+  resourceGroupLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 8,
+    marginTop: 4,
   },
 });

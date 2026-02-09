@@ -1,9 +1,19 @@
+import { useEffect, useState } from 'react';
 import { Redirect, Stack } from 'expo-router';
 import { Text, View } from 'react-native';
 import { useSession } from '@/src/providers/SessionProvider';
+import { migrateLocalSummaries } from '@/src/services/summaryService';
 
 export default function AppLayout() {
-  const { session, isLoading } = useSession();
+  const { session, user, isLoading } = useSession();
+  const [migrating, setMigrating] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      setMigrating(true);
+      migrateLocalSummaries(user.id).finally(() => setMigrating(false));
+    }
+  }, [user?.id]);
 
   if (isLoading) {
     return (
@@ -15,6 +25,14 @@ export default function AppLayout() {
 
   if (!session) {
     return <Redirect href="/welcome" />;
+  }
+
+  if (migrating) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <Text>Syncing your data...</Text>
+      </View>
+    );
   }
 
   return (

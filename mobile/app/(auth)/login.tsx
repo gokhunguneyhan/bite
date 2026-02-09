@@ -1,4 +1,4 @@
-import { View, Text, TextInput, Pressable, StyleSheet } from 'react-native';
+import { View, Text, TextInput, Pressable, Alert, ActivityIndicator, StyleSheet } from 'react-native';
 import { useState } from 'react';
 import { router } from 'expo-router';
 import { useSession } from '@/src/providers/SessionProvider';
@@ -8,11 +8,24 @@ export default function LoginScreen() {
   const { signIn } = useSession();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = () => {
-    // TODO: Replace with real API call
-    signIn('mock-session-token');
-    router.replace('/');
+  const handleLogin = async () => {
+    if (!email.trim() || !password) {
+      Alert.alert('Missing fields', 'Please enter your email and password.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await signIn(email.trim(), password);
+      router.replace('/');
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Login failed';
+      Alert.alert('Login failed', message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -33,6 +46,7 @@ export default function LoginScreen() {
           autoCapitalize="none"
           keyboardType="email-address"
           placeholderTextColor={Colors.tabIconDefault}
+          editable={!loading}
         />
         <TextInput
           style={styles.input}
@@ -41,9 +55,17 @@ export default function LoginScreen() {
           onChangeText={setPassword}
           secureTextEntry
           placeholderTextColor={Colors.tabIconDefault}
+          editable={!loading}
         />
-        <Pressable style={styles.button} onPress={handleLogin}>
-          <Text style={styles.buttonText}>Log In</Text>
+        <Pressable
+          style={[styles.button, loading && styles.buttonDisabled]}
+          onPress={handleLogin}
+          disabled={loading}>
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.buttonText}>Log In</Text>
+          )}
         </Pressable>
       </View>
 
@@ -101,6 +123,9 @@ const styles = StyleSheet.create({
     padding: 18,
     alignItems: 'center',
     marginTop: 8,
+  },
+  buttonDisabled: {
+    opacity: 0.7,
   },
   buttonText: {
     color: '#fff',

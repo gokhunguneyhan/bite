@@ -7,6 +7,7 @@ import {
   Dimensions,
   StyleSheet,
   ActivityIndicator,
+  ScrollView,
 } from 'react-native';
 import { useRef, useState } from 'react';
 import { useLocalSearchParams, router } from 'expo-router';
@@ -22,13 +23,12 @@ export default function RefresherScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { data: summary, isLoading } = useSummary(id);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [flipped, setFlipped] = useState(false);
   const [savedCards, setSavedCards] = useState<Set<string>>(new Set());
   const position = useRef(new Animated.ValueXY()).current;
 
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (_, gesture) =>
         Math.abs(gesture.dx) > 10,
       onPanResponderMove: (_, gesture) => {
@@ -65,7 +65,6 @@ export default function RefresherScreen() {
       useNativeDriver: true,
     }).start(() => {
       position.setValue({ x: 0, y: 0 });
-      setFlipped(false);
       setCurrentIndex((prev) => prev + 1);
     });
   };
@@ -157,40 +156,36 @@ export default function RefresherScreen() {
           {/* Swipe indicators */}
           <Animated.View
             style={[styles.swipeLabel, styles.skipLabel, { opacity: swipeLeftOpacity }]}>
-            <Text style={styles.skipLabelText}>SKIP</Text>
+            <Text style={styles.skipLabelText}>DISCARD</Text>
           </Animated.View>
           <Animated.View
             style={[styles.swipeLabel, styles.saveLabel, { opacity: swipeRightOpacity }]}>
-            <Text style={styles.saveLabelText}>SAVE</Text>
+            <Text style={styles.saveLabelText}>KEEP</Text>
           </Animated.View>
 
-          <Pressable
-            style={styles.cardContent}
-            onPress={() => setFlipped(!flipped)}>
-            <Text style={styles.cardSide}>
-              {flipped ? 'Answer' : 'Question'}
-            </Text>
-            <Text style={styles.cardText}>
-              {flipped ? currentCard.backText : currentCard.frontText}
-            </Text>
-            {!flipped && (
-              <Text style={styles.tapHint}>Tap to reveal answer</Text>
-            )}
-          </Pressable>
+          <ScrollView
+            style={styles.cardScroll}
+            contentContainerStyle={styles.cardContent}
+            showsVerticalScrollIndicator={false}>
+            <Text style={styles.cardTitle}>{currentCard.title}</Text>
+            <Text style={styles.cardExplanation}>{currentCard.explanation}</Text>
+          </ScrollView>
         </Animated.View>
       </View>
 
       {/* Buttons */}
       <View style={styles.controls}>
         <Pressable
-          style={styles.skipButton}
+          style={styles.discardButton}
           onPress={() => swipeCard('left')}>
-          <Ionicons name="close" size={28} color={Colors.textSecondary} />
+          <Ionicons name="close" size={22} color={Colors.textSecondary} />
+          <Text style={styles.discardButtonText}>Discard</Text>
         </Pressable>
         <Pressable
-          style={styles.saveButton}
+          style={styles.keepButton}
           onPress={() => swipeCard('right')}>
-          <Ionicons name="heart" size={28} color="#fff" />
+          <Ionicons name="bookmark" size={22} color="#fff" />
+          <Text style={styles.keepButtonText}>Keep</Text>
         </Pressable>
       </View>
     </View>
@@ -245,7 +240,7 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: Colors.surface,
     borderRadius: 20,
-    minHeight: 320,
+    maxHeight: '85%',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
@@ -268,7 +263,7 @@ const styles = StyleSheet.create({
   skipLabelText: {
     color: Colors.error,
     fontWeight: '800',
-    fontSize: 16,
+    fontSize: 14,
   },
   saveLabel: {
     right: 20,
@@ -277,57 +272,63 @@ const styles = StyleSheet.create({
   saveLabelText: {
     color: Colors.success,
     fontWeight: '800',
-    fontSize: 16,
+    fontSize: 14,
+  },
+  cardScroll: {
+    borderRadius: 20,
   },
   cardContent: {
-    flex: 1,
-    padding: 32,
-    justifyContent: 'center',
-    alignItems: 'center',
-    minHeight: 320,
+    padding: 28,
+    paddingTop: 52,
   },
-  cardSide: {
-    fontSize: 12,
+  cardTitle: {
+    fontSize: 20,
     fontWeight: '700',
-    color: Colors.tabIconDefault,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: 20,
-  },
-  cardText: {
-    fontSize: 18,
     color: Colors.text,
-    textAlign: 'center',
-    lineHeight: 28,
-    fontWeight: '500',
+    lineHeight: 26,
+    marginBottom: 16,
   },
-  tapHint: {
-    fontSize: 13,
-    color: Colors.tabIconDefault,
-    marginTop: 24,
+  cardExplanation: {
+    fontSize: 16,
+    color: Colors.textSecondary,
+    lineHeight: 26,
   },
   controls: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 32,
+    gap: 16,
     paddingVertical: 20,
   },
-  skipButton: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+  discardButton: {
+    flex: 1,
+    flexDirection: 'row',
+    height: 52,
+    borderRadius: 14,
     borderWidth: 2,
     borderColor: Colors.border,
     justifyContent: 'center',
     alignItems: 'center',
+    gap: 8,
   },
-  saveButton: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+  discardButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.textSecondary,
+  },
+  keepButton: {
+    flex: 1,
+    flexDirection: 'row',
+    height: 52,
+    borderRadius: 14,
     backgroundColor: Colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
+    gap: 8,
+  },
+  keepButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
   },
   doneTitle: {
     fontSize: 24,
