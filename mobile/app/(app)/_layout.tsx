@@ -77,6 +77,10 @@ export default function AppLayout() {
           }}
         />
         <Stack.Screen
+          name="category/[name]"
+          options={{ headerBackTitle: 'Back' }}
+        />
+        <Stack.Screen
           name="creator/[id]"
           options={{ title: 'Creator Profile', headerBackTitle: 'Back' }}
         />
