@@ -1,15 +1,26 @@
-import { View, Text, TextInput, Pressable, Alert, ActivityIndicator, StyleSheet } from 'react-native';
+import {
+  View,
+  Text,
+  TextInput,
+  Pressable,
+  Alert,
+  ActivityIndicator,
+  StyleSheet,
+} from 'react-native';
 import { useState } from 'react';
 import { router } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/src/providers/SessionProvider';
 import { Colors } from '@/src/constants/colors';
+import { isAppleAuthAvailable } from '@/src/services/appleAuthService';
 
 export default function RegisterScreen() {
-  const { signUp } = useSession();
+  const { signUp, signInWithGoogle, signInWithApple } = useSession();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [socialLoading, setSocialLoading] = useState<'google' | 'apple' | null>(null);
 
   const handleRegister = async () => {
     if (!name.trim() || !email.trim() || !password) {
@@ -24,8 +35,6 @@ export default function RegisterScreen() {
     setLoading(true);
     try {
       await signUp(email.trim(), password, name.trim());
-      // With email confirmation disabled, signUp auto-signs in.
-      // Session will be picked up by onAuthStateChange in SessionProvider.
       router.replace('/');
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Registration failed';
@@ -34,6 +43,38 @@ export default function RegisterScreen() {
       setLoading(false);
     }
   };
+
+  const handleGoogleSignIn = async () => {
+    setSocialLoading('google');
+    try {
+      await signInWithGoogle();
+      router.replace('/');
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Google sign-in failed';
+      if (!message.includes('cancel')) {
+        Alert.alert('Google Sign-In failed', message);
+      }
+    } finally {
+      setSocialLoading(null);
+    }
+  };
+
+  const handleAppleSignIn = async () => {
+    setSocialLoading('apple');
+    try {
+      await signInWithApple();
+      router.replace('/');
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Apple sign-in failed';
+      if (!message.includes('cancel')) {
+        Alert.alert('Apple Sign-In failed', message);
+      }
+    } finally {
+      setSocialLoading(null);
+    }
+  };
+
+  const isDisabled = loading || socialLoading !== null;
 
   return (
     <View style={styles.container}>
@@ -44,6 +85,53 @@ export default function RegisterScreen() {
       <Text style={styles.title}>Create account</Text>
       <Text style={styles.subtitle}>Start summarizing in seconds</Text>
 
+      {/* Social login buttons */}
+      <View style={styles.socialButtons}>
+        <Pressable
+          style={styles.socialButton}
+          onPress={handleGoogleSignIn}
+          disabled={isDisabled}
+          accessibilityLabel="Continue with Google"
+          accessibilityRole="button">
+          {socialLoading === 'google' ? (
+            <ActivityIndicator color={Colors.text} size="small" />
+          ) : (
+            <>
+              <Ionicons name="logo-google" size={20} color={Colors.text} />
+              <Text style={styles.socialButtonText}>Continue with Google</Text>
+            </>
+          )}
+        </Pressable>
+
+        {isAppleAuthAvailable() && (
+          <Pressable
+            style={[styles.socialButton, styles.appleButton]}
+            onPress={handleAppleSignIn}
+            disabled={isDisabled}
+            accessibilityLabel="Continue with Apple"
+            accessibilityRole="button">
+            {socialLoading === 'apple' ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <>
+                <Ionicons name="logo-apple" size={20} color="#fff" />
+                <Text style={[styles.socialButtonText, styles.appleButtonText]}>
+                  Continue with Apple
+                </Text>
+              </>
+            )}
+          </Pressable>
+        )}
+      </View>
+
+      {/* Divider */}
+      <View style={styles.divider}>
+        <View style={styles.dividerLine} />
+        <Text style={styles.dividerText}>or</Text>
+        <View style={styles.dividerLine} />
+      </View>
+
+      {/* Email/password form */}
       <View style={styles.form}>
         <TextInput
           style={styles.input}
@@ -51,7 +139,7 @@ export default function RegisterScreen() {
           value={name}
           onChangeText={setName}
           placeholderTextColor={Colors.tabIconDefault}
-          editable={!loading}
+          editable={!isDisabled}
         />
         <TextInput
           style={styles.input}
@@ -61,7 +149,7 @@ export default function RegisterScreen() {
           autoCapitalize="none"
           keyboardType="email-address"
           placeholderTextColor={Colors.tabIconDefault}
-          editable={!loading}
+          editable={!isDisabled}
         />
         <TextInput
           style={styles.input}
@@ -70,12 +158,12 @@ export default function RegisterScreen() {
           onChangeText={setPassword}
           secureTextEntry
           placeholderTextColor={Colors.tabIconDefault}
-          editable={!loading}
+          editable={!isDisabled}
         />
         <Pressable
-          style={[styles.button, loading && styles.buttonDisabled]}
+          style={[styles.button, isDisabled && styles.buttonDisabled]}
           onPress={handleRegister}
-          disabled={loading}>
+          disabled={isDisabled}>
           {loading ? (
             <ActivityIndicator color="#fff" />
           ) : (
@@ -116,7 +204,49 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: Colors.textSecondary,
     marginTop: 8,
-    marginBottom: 32,
+    marginBottom: 24,
+  },
+  socialButtons: {
+    gap: 12,
+    marginBottom: 4,
+  },
+  socialButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    borderRadius: 12,
+    padding: 16,
+    backgroundColor: Colors.surface,
+  },
+  socialButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.text,
+  },
+  appleButton: {
+    backgroundColor: '#000',
+    borderColor: '#000',
+  },
+  appleButtonText: {
+    color: '#fff',
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 20,
+  },
+  dividerLine: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: Colors.border,
+  },
+  dividerText: {
+    color: Colors.textSecondary,
+    fontSize: 14,
+    marginHorizontal: 16,
   },
   form: {
     gap: 16,

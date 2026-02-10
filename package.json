@@ -1,5 +1,19 @@
 {
   "dependencies": {
-    "claude-flow": "^2.7.47"
+    "claude-flow": "^2.7.47",
+    "expo": "^54.0.33",
+    "expo-linking": "~8.0.11",
+    "react": "19.1.0",
+    "react-native": "0.81.5"
+  },
+  "name": "yt-summarise",
+  "version": "1.0.0",
+  "scripts": {
+    "android": "expo run:android",
+    "ios": "expo run:ios"
+  },
+  "devDependencies": {
+    "@types/react": "~19.1.10",
+    "typescript": "~5.9.2"
   }
 }

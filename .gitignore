@@ -47,3 +47,4 @@ mobile/.env
 # Claude Code tooling (per-developer config)
 .claude/
 SOCIAL_MEDIA_MARKETING_PLAN.md
+UI_UX_IMPROVEMENTS_PROMPT.md

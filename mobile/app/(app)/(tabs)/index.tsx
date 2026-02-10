@@ -21,6 +21,13 @@ import { usePreferences, useOnboardingStatus } from '@/src/hooks/usePreferences'
 import { useDueCards } from '@/src/hooks/useSpacedRepetition';
 import { VerticalVideoCard } from '@/src/components/summary/VerticalVideoCard';
 import { useToast } from '@/src/components/ui/Toast';
+import { useYouTubeStore } from '@/src/stores/youtubeStore';
+import type { Summary } from '@/src/types/summary';
+import type { YouTubeVideo } from '@/src/mocks/youtubeSubscriptions';
+
+type FeedItem =
+  | { type: 'summary'; data: Summary; date: string }
+  | { type: 'video'; data: YouTubeVideo; date: string };
 
 export default function HomeScreen() {
   const { data: summaries, isLoading } = useSummaries();
@@ -32,6 +39,7 @@ export default function HomeScreen() {
   const { data: hasOnboarded } = useOnboardingStatus();
   const showToast = useToast();
   const importMutation = useImportYouTubeSubscriptions();
+  const channelVideos = useYouTubeStore((s) => s.channelVideos);
 
   const dueCount = dueCards?.length ?? 0;
   const hasPersonalised = hasOnboarded === true;
@@ -43,7 +51,7 @@ export default function HomeScreen() {
     [summaries],
   );
 
-  // Community summaries from followed channels
+  // Analysed summaries from followed channels
   const channelSummaries = useMemo(() => {
     if (!communitySummaries || !subscriptions?.length) return [];
     const followed = subscriptions.map((s) => s.channelName.toLowerCase());
@@ -51,6 +59,36 @@ export default function HomeScreen() {
       followed.includes(s.channelName.toLowerCase()),
     );
   }, [communitySummaries, subscriptions]);
+
+  // Build a mixed feed: analysed summaries + latest unanalysed videos
+  const followedFeedItems = useMemo(() => {
+    const items: FeedItem[] = [];
+
+    // Add analysed summaries
+    for (const s of channelSummaries) {
+      items.push({ type: 'summary', data: s, date: s.createdAt });
+    }
+
+    // Add unanalysed latest videos from YouTube store
+    const analysedVideoIds = new Set(
+      channelSummaries.map((s) => s.videoId),
+    );
+
+    if (subscriptions) {
+      for (const sub of subscriptions) {
+        const videos = channelVideos[sub.channelName] ?? [];
+        for (const v of videos) {
+          if (!analysedVideoIds.has(v.videoId)) {
+            items.push({ type: 'video', data: v, date: v.publishedAt });
+          }
+        }
+      }
+    }
+
+    // Sort by date, newest first
+    items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    return items.slice(0, 15);
+  }, [channelSummaries, subscriptions, channelVideos]);
 
   // Community summaries filtered by user's preferred categories
   const communitySummariesFiltered = useMemo(() => {
@@ -125,8 +163,6 @@ export default function HomeScreen() {
           <Ionicons name="chevron-forward" size={18} color="#fff" />
         </Pressable>
       )}
-
-      {/* TODO: Continue Reading section — track lastReadPosition per summary */}
 
       {/* Your Refresher Cards */}
       <Text style={styles.sectionTitle}>Your Refresher Cards</Text>
@@ -227,37 +263,82 @@ export default function HomeScreen() {
         </>
       )}
 
-      {/* New from Followed Channels — only shown after user has subscriptions */}
+      {/* New from Followed Channels — shows analysed + latest unanalysed videos */}
       {hasSubscriptions && (
         <>
           <Text style={styles.sectionTitle}>New from Followed Channels</Text>
-          {channelSummaries.length > 0 ? (
+          {followedFeedItems.length > 0 ? (
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
               style={styles.horizontalScroll}
               contentContainerStyle={styles.horizontalContent}>
-              {channelSummaries.slice(0, 10).map((s) => (
-                <Pressable
-                  key={s.id}
-                  style={styles.channelCard}
-                  onPress={() => router.push(`/summary/${s.id}`)}
-                  accessibilityRole="button">
-                  <Image
-                    source={{ uri: s.thumbnailUrl }}
-                    style={styles.channelCardThumb}
-                    resizeMode="cover"
-                  />
-                  <View style={styles.channelCardInfo}>
-                    <Text style={styles.channelCardTitle} numberOfLines={2}>
-                      {s.videoTitle}
-                    </Text>
-                    <Text style={styles.channelCardChannel}>
-                      {s.channelName}
-                    </Text>
-                  </View>
-                </Pressable>
-              ))}
+              {followedFeedItems.map((item) =>
+                item.type === 'summary' ? (
+                  <Pressable
+                    key={`s-${item.data.id}`}
+                    style={styles.channelCard}
+                    onPress={() => router.push(`/summary/${item.data.id}`)}
+                    accessibilityRole="button">
+                    <Image
+                      source={{ uri: item.data.thumbnailUrl }}
+                      style={styles.channelCardThumb}
+                      resizeMode="cover"
+                    />
+                    <View style={styles.channelCardInfo}>
+                      <Text style={styles.channelCardTitle} numberOfLines={2}>
+                        {item.data.videoTitle}
+                      </Text>
+                      <Text style={styles.channelCardChannel}>
+                        {item.data.channelName}
+                      </Text>
+                    </View>
+                  </Pressable>
+                ) : (
+                  <Pressable
+                    key={`v-${item.data.videoId}`}
+                    style={styles.videoCard}
+                    onPress={() =>
+                      router.push({
+                        pathname: '/analyse',
+                        params: {
+                          url: `https://youtube.com/watch?v=${item.data.videoId}`,
+                        },
+                      })
+                    }
+                    accessibilityLabel={`Analyse ${item.data.title}`}
+                    accessibilityRole="button">
+                    <Image
+                      source={{ uri: item.data.thumbnailUrl }}
+                      style={styles.channelCardThumb}
+                      resizeMode="cover"
+                    />
+                    {item.data.durationLabel ? (
+                      <View style={styles.durationBadge}>
+                        <Text style={styles.durationText}>
+                          {item.data.durationLabel}
+                        </Text>
+                      </View>
+                    ) : null}
+                    <View style={styles.channelCardInfo}>
+                      <Text style={styles.channelCardTitle} numberOfLines={2}>
+                        {item.data.title}
+                      </Text>
+                      <Text style={styles.channelCardChannel}>
+                        {item.data.channelName}
+                      </Text>
+                      <View style={styles.analyseTag}>
+                        <Ionicons
+                          name="sparkles-outline"
+                          size={12}
+                          color={Colors.primary}
+                        />
+                        <Text style={styles.analyseTagText}>Analyse</Text>
+                      </View>
+                    </View>
+                  </Pressable>
+                ),
+              )}
             </ScrollView>
           ) : (
             <View style={styles.placeholder}>
@@ -267,8 +348,8 @@ export default function HomeScreen() {
                 color={Colors.tabIconDefault}
               />
               <Text style={styles.placeholderText}>
-                No analysed videos from your followed channels yet. Tap a
-                channel to browse their latest videos.
+                No videos from your followed channels yet. Tap a channel to
+                browse their latest videos.
               </Text>
             </View>
           )}
@@ -370,7 +451,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     marginTop: 8,
   },
-  // Refresher cards horizontal scroll
+  // Horizontal scrolls
   horizontalScroll: {
     marginHorizontal: -24,
     marginBottom: 16,
@@ -410,7 +491,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.primary,
   },
-  // Channel cards
+  // Channel + video cards
   channelCard: {
     width: 220,
     backgroundColor: Colors.surface,
@@ -435,6 +516,37 @@ const styles = StyleSheet.create({
   channelCardChannel: {
     fontSize: 12,
     color: Colors.textSecondary,
+  },
+  videoCard: {
+    width: 220,
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  durationBadge: {
+    position: 'absolute',
+    top: 100,
+    right: 8,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  durationText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  analyseTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
+  },
+  analyseTagText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.primary,
   },
   // Placeholders
   placeholder: {

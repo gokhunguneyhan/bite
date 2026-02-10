@@ -5,8 +5,11 @@ import {
   useState,
   type PropsWithChildren,
 } from 'react';
+import { Platform } from 'react-native';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/src/lib/supabase';
+import { googleSignIn, signOutGoogle } from '@/src/services/googleAuthService';
+import { appleSignIn, isAppleAuthAvailable } from '@/src/services/appleAuthService';
 
 interface Profile {
   id: string;
@@ -17,6 +20,8 @@ interface Profile {
 interface AuthContextValue {
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, fullName: string) => Promise<void>;
+  signInWithGoogle: () => Promise<void>;
+  signInWithApple: () => Promise<void>;
   signOut: () => void;
   session: Session | null;
   user: User | null;
@@ -27,6 +32,8 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue>({
   signIn: async () => {},
   signUp: async () => {},
+  signInWithGoogle: async () => {},
+  signInWithApple: async () => {},
   signOut: () => {},
   session: null,
   user: null,
@@ -50,7 +57,6 @@ export function SessionProvider({ children }: PropsWithChildren) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Load existing session
     supabase.auth.getSession().then(({ data: { session: s } }) => {
       setSession(s);
       if (s?.user) {
@@ -59,7 +65,6 @@ export function SessionProvider({ children }: PropsWithChildren) {
       setIsLoading(false);
     });
 
-    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_event, s) => {
         setSession(s);
@@ -97,7 +102,30 @@ export function SessionProvider({ children }: PropsWithChildren) {
     if (error) throw error;
   }
 
+  async function handleGoogleSignIn() {
+    const { idToken } = await googleSignIn();
+    const { error } = await supabase.auth.signInWithIdToken({
+      provider: 'google',
+      token: idToken,
+    });
+    if (error) throw error;
+  }
+
+  async function handleAppleSignIn() {
+    if (!isAppleAuthAvailable()) {
+      throw new Error('Apple Sign-In is only available on iOS');
+    }
+    const { idToken, nonce } = await appleSignIn();
+    const { error } = await supabase.auth.signInWithIdToken({
+      provider: 'apple',
+      token: idToken,
+      nonce,
+    });
+    if (error) throw error;
+  }
+
   function signOut() {
+    signOutGoogle();
     supabase.auth.signOut();
   }
 
@@ -106,6 +134,8 @@ export function SessionProvider({ children }: PropsWithChildren) {
       value={{
         signIn,
         signUp,
+        signInWithGoogle: handleGoogleSignIn,
+        signInWithApple: handleAppleSignIn,
         signOut,
         session,
         user: session?.user ?? null,
