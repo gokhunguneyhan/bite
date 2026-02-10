@@ -35,7 +35,7 @@ export default function RegisterScreen() {
     setLoading(true);
     try {
       await signUp(email.trim(), password, name.trim());
-      router.replace('/');
+      router.replace('/confirm-email');
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Registration failed';
       Alert.alert('Registration failed', message);
@@ -135,7 +135,7 @@ export default function RegisterScreen() {
       <View style={styles.form}>
         <TextInput
           style={styles.input}
-          placeholder="Full name"
+          placeholder="Display name"
           value={name}
           onChangeText={setName}
           placeholderTextColor={Colors.tabIconDefault}

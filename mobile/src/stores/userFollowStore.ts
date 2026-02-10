@@ -22,6 +22,7 @@ interface UserFollowState {
   followUser: (data: Omit<UserFollow, 'followedAt'>) => void;
   unfollowUser: (userId: string) => void;
   isFollowingUser: (userId: string) => boolean;
+  clear: () => void;
 }
 
 export const useUserFollowStore = create<UserFollowState>()(
@@ -45,6 +46,7 @@ export const useUserFollowStore = create<UserFollowState>()(
       isFollowingUser: (userId) => {
         return get().follows.some((f) => f.userId === userId);
       },
+      clear: () => set({ follows: [] }),
     }),
     {
       name: '@yt_summarise_user_follows',

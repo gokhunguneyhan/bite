@@ -1,12 +1,10 @@
-import { View, Text, Switch, StyleSheet } from 'react-native';
+import { View, Text, Switch, Pressable, StyleSheet } from 'react-native';
 import { Colors } from '@/src/constants/colors';
 
 interface OwnerProps {
   isOwner: true;
-  isPublic: boolean;
   isAnonymous: boolean;
   isPending: boolean;
-  onTogglePublic: () => void;
   onToggleAnonymous: () => void;
 }
 
@@ -14,6 +12,8 @@ interface ViewerProps {
   isOwner: false;
   analystName?: string;
   analysisCount?: number;
+  onFollow?: () => void;
+  isFollowing?: boolean;
 }
 
 type Props = OwnerProps | ViewerProps;
@@ -22,42 +22,31 @@ export function CommunityShareCallout(props: Props) {
   if (props.isOwner) {
     return (
       <View style={styles.container}>
-        <Text style={styles.heading}>Community Sharing</Text>
-        <Text style={styles.description}>
-          {props.isPublic
-            ? "This analysis is shared with the community but we've hidden your name."
-            : 'Turn on sharing to let others discover this analysis.'}
-        </Text>
-
         <View style={styles.toggleRow}>
-          <Text style={styles.toggleLabel}>Share to community</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.toggleLabel}>Stay anonymous</Text>
+            <Text style={styles.description}>
+              {props.isAnonymous
+                ? 'Your name is hidden on this analysis'
+                : 'Your name is visible on this analysis'}
+            </Text>
+          </View>
           <Switch
-            value={props.isPublic}
-            onValueChange={props.onTogglePublic}
+            value={props.isAnonymous}
+            onValueChange={props.onToggleAnonymous}
             disabled={props.isPending}
             trackColor={{ true: Colors.primary, false: Colors.border }}
-            accessibilityLabel="Share to community"
+            accessibilityLabel="Stay anonymous"
           />
         </View>
-
-        {props.isPublic && (
-          <View style={styles.toggleRow}>
-            <Text style={styles.toggleLabel}>Show my name</Text>
-            <Switch
-              value={!props.isAnonymous}
-              onValueChange={props.onToggleAnonymous}
-              trackColor={{ true: Colors.primary, false: Colors.border }}
-              accessibilityLabel="Show my name"
-            />
-          </View>
-        )}
       </View>
     );
   }
 
-  // Viewer mode
-  const name = props.analystName || 'Anonymous';
-  const count = props.analysisCount ?? 0;
+  // Viewer mode — if anonymous (no analystName), render nothing
+  if (!props.analystName) return null;
+
+  const name = props.analystName;
 
   return (
     <View style={styles.viewerContainer}>
@@ -65,15 +54,24 @@ export function CommunityShareCallout(props: Props) {
         <Text style={styles.viewerInitial}>{name.charAt(0).toUpperCase()}</Text>
       </View>
       <View style={styles.viewerInfo}>
-        <Text style={styles.viewerName}>
-          Analysed by {name}
-        </Text>
-        {count > 0 && (
-          <Text style={styles.viewerCount}>
-            {count} {count === 1 ? 'analysis' : 'analyses'}
-          </Text>
-        )}
+        <Text style={styles.viewerName}>{name}</Text>
       </View>
+      {props.onFollow && (
+        <Pressable
+          style={[
+            styles.followButton,
+            props.isFollowing && styles.followButtonActive,
+          ]}
+          onPress={props.onFollow}>
+          <Text
+            style={[
+              styles.followButtonText,
+              props.isFollowing && styles.followButtonTextActive,
+            ]}>
+            {props.isFollowing ? 'Following' : 'Follow'}
+          </Text>
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -85,17 +83,11 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 12,
   },
-  heading: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
   description: {
-    fontSize: 14,
-    color: Colors.text,
-    lineHeight: 20,
+    fontSize: 13,
+    color: Colors.textSecondary,
+    lineHeight: 18,
+    marginTop: 2,
   },
   toggleRow: {
     flexDirection: 'row',
@@ -105,6 +97,7 @@ const styles = StyleSheet.create({
   toggleLabel: {
     fontSize: 15,
     color: Colors.text,
+    fontWeight: '500',
   },
   viewerContainer: {
     flexDirection: 'row',
@@ -135,9 +128,21 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.text,
   },
-  viewerCount: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    marginTop: 2,
+  followButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: Colors.primary,
+  },
+  followButtonActive: {
+    backgroundColor: Colors.primary + '15',
+  },
+  followButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  followButtonTextActive: {
+    color: Colors.primary,
   },
 });

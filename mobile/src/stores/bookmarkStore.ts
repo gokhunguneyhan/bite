@@ -18,6 +18,7 @@ interface BookmarkState {
   addBookmark: (data: Omit<Bookmark, 'id' | 'createdAt'>) => void;
   removeBookmark: (summaryId: string, sectionIndex: number) => void;
   isBookmarked: (summaryId: string, sectionIndex: number) => boolean;
+  clear: () => void;
 }
 
 export const useBookmarkStore = create<BookmarkState>()(
@@ -44,6 +45,7 @@ export const useBookmarkStore = create<BookmarkState>()(
           (b) => b.summaryId === summaryId && b.sectionIndex === sectionIndex,
         );
       },
+      clear: () => set({ bookmarks: [] }),
     }),
     {
       name: '@yt_summarise_bookmarks',

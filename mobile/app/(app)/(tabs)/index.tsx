@@ -21,13 +21,15 @@ import { usePreferences, useOnboardingStatus } from '@/src/hooks/usePreferences'
 import { useDueCards } from '@/src/hooks/useSpacedRepetition';
 import { VerticalVideoCard } from '@/src/components/summary/VerticalVideoCard';
 import { useToast } from '@/src/components/ui/Toast';
-import { useYouTubeStore } from '@/src/stores/youtubeStore';
-import type { Summary } from '@/src/types/summary';
+import { getChannelLatestVideos } from '@/src/services/youtubeImportService';
 import type { YouTubeVideo } from '@/src/mocks/youtubeSubscriptions';
+import type { Summary } from '@/src/types/summary';
 
-type FeedItem =
-  | { type: 'summary'; data: Summary; date: string }
-  | { type: 'video'; data: YouTubeVideo; date: string };
+type FeedEntry =
+  | { type: 'summary'; data: Summary }
+  | { type: 'personalise' }
+  | { type: 'refresher'; data: Summary }
+  | { type: 'suggestion'; data: YouTubeVideo };
 
 export default function HomeScreen() {
   const { data: summaries, isLoading } = useSummaries();
@@ -39,7 +41,6 @@ export default function HomeScreen() {
   const { data: hasOnboarded } = useOnboardingStatus();
   const showToast = useToast();
   const importMutation = useImportYouTubeSubscriptions();
-  const channelVideos = useYouTubeStore((s) => s.channelVideos);
 
   const dueCount = dueCards?.length ?? 0;
   const hasPersonalised = hasOnboarded === true;
@@ -50,45 +51,6 @@ export default function HomeScreen() {
     () => summaries?.filter((s) => s.refresherCards?.length > 0) ?? [],
     [summaries],
   );
-
-  // Analysed summaries from followed channels
-  const channelSummaries = useMemo(() => {
-    if (!communitySummaries || !subscriptions?.length) return [];
-    const followed = subscriptions.map((s) => s.channelName.toLowerCase());
-    return communitySummaries.filter((s) =>
-      followed.includes(s.channelName.toLowerCase()),
-    );
-  }, [communitySummaries, subscriptions]);
-
-  // Build a mixed feed: analysed summaries + latest unanalysed videos
-  const followedFeedItems = useMemo(() => {
-    const items: FeedItem[] = [];
-
-    // Add analysed summaries
-    for (const s of channelSummaries) {
-      items.push({ type: 'summary', data: s, date: s.createdAt });
-    }
-
-    // Add unanalysed latest videos from YouTube store
-    const analysedVideoIds = new Set(
-      channelSummaries.map((s) => s.videoId),
-    );
-
-    if (subscriptions) {
-      for (const sub of subscriptions) {
-        const videos = channelVideos[sub.channelName] ?? [];
-        for (const v of videos) {
-          if (!analysedVideoIds.has(v.videoId)) {
-            items.push({ type: 'video', data: v, date: v.publishedAt });
-          }
-        }
-      }
-    }
-
-    // Sort by date, newest first
-    items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    return items.slice(0, 15);
-  }, [channelSummaries, subscriptions, channelVideos]);
 
   // Community summaries filtered by user's preferred categories
   const communitySummariesFiltered = useMemo(() => {
@@ -102,6 +64,70 @@ export default function HomeScreen() {
     }
     return communitySummaries;
   }, [communitySummaries, preferences?.preferredCategories]);
+
+  // Build a single mixed feed
+  const feedItems = useMemo(() => {
+    const items: FeedEntry[] = [];
+    const community = communitySummariesFiltered;
+    const refreshers = [...summariesWithCards];
+    let communityIdx = 0;
+    let refresherIdx = 0;
+
+    // 1. First 2 community summaries
+    while (communityIdx < 2 && communityIdx < community.length) {
+      items.push({ type: 'summary', data: community[communityIdx] });
+      communityIdx++;
+    }
+
+    // 2. Personalise card (if applicable)
+    if (!hasPersonalised && !hasSubscriptions) {
+      items.push({ type: 'personalise' });
+    }
+
+    // 3. One inline refresher card (if any)
+    if (refresherIdx < refreshers.length) {
+      items.push({ type: 'refresher', data: refreshers[refresherIdx] });
+      refresherIdx++;
+    }
+
+    // 4. Remaining community summaries interleaved with refreshers (1 every 3)
+    let sinceLastRefresher = 0;
+    while (communityIdx < community.length) {
+      items.push({ type: 'summary', data: community[communityIdx] });
+      communityIdx++;
+      sinceLastRefresher++;
+
+      if (sinceLastRefresher === 3 && refresherIdx < refreshers.length) {
+        items.push({ type: 'refresher', data: refreshers[refresherIdx] });
+        refresherIdx++;
+        sinceLastRefresher = 0;
+      }
+    }
+
+    // 5. If feed is sparse and user has subscriptions, add video suggestions
+    if (items.filter((i) => i.type === 'summary').length < 4 && hasSubscriptions && subscriptions) {
+      const seen = new Set<string>();
+      const suggestions: YouTubeVideo[] = [];
+      for (const sub of subscriptions) {
+        const videos = getChannelLatestVideos(sub.channelName);
+        for (const v of videos) {
+          if (!seen.has(v.videoId)) {
+            seen.add(v.videoId);
+            suggestions.push(v);
+          }
+        }
+      }
+      // Sort by date, take up to 8
+      suggestions.sort((a, b) =>
+        new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime(),
+      );
+      for (const s of suggestions.slice(0, 8)) {
+        items.push({ type: 'suggestion', data: s });
+      }
+    }
+
+    return items;
+  }, [communitySummariesFiltered, summariesWithCards, hasPersonalised, hasSubscriptions, subscriptions]);
 
   const handleImportYouTube = () => {
     importMutation.mutate(undefined, {
@@ -164,204 +190,130 @@ export default function HomeScreen() {
         </Pressable>
       )}
 
-      {/* Your Refresher Cards */}
-      <Text style={styles.sectionTitle}>Your Refresher Cards</Text>
-      {summariesWithCards.length > 0 ? (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.horizontalScroll}
-          contentContainerStyle={styles.horizontalContent}>
-          {summariesWithCards.map((s) => (
-            <Pressable
-              key={s.id}
-              style={styles.refresherCard}
-              onPress={() => router.push(`/refresher/${s.id}`)}
-              accessibilityLabel={`${s.videoTitle} — ${s.refresherCards.length} cards`}
-              accessibilityRole="button">
-              <Image
-                source={{ uri: s.thumbnailUrl }}
-                style={styles.refresherThumb}
-                resizeMode="cover"
-              />
-              <View style={styles.refresherInfo}>
-                <Text style={styles.refresherTitle} numberOfLines={2}>
-                  {s.videoTitle}
+      {/* Single mixed feed */}
+      {feedItems.length > 0 ? (
+        feedItems.map((item, index) => {
+          if (item.type === 'summary') {
+            return <VerticalVideoCard key={`s-${item.data.id}`} summary={item.data} />;
+          }
+
+          if (item.type === 'personalise') {
+            return (
+              <View key="personalise" style={styles.personaliseCard}>
+                <View style={styles.personaliseIconRow}>
+                  <View style={styles.personaliseIcon}>
+                    <Ionicons name="sparkles" size={24} color={Colors.primary} />
+                  </View>
+                </View>
+                <Text style={styles.personaliseTitle}>
+                  Personalise your feed
                 </Text>
-                <View style={styles.refresherBadge}>
-                  <Ionicons
-                    name="albums-outline"
-                    size={12}
-                    color={Colors.primary}
-                  />
-                  <Text style={styles.refresherCount}>
-                    {s.refresherCards.length} cards
+                <Text style={styles.personaliseSubtitle}>
+                  Your time is valuable, so let's curate what matters to you.
+                </Text>
+                <Pressable
+                  style={styles.personaliseYouTubeBtn}
+                  onPress={handleImportYouTube}
+                  disabled={importMutation.isPending}
+                  accessibilityLabel="Import subscribed channels from YouTube"
+                  accessibilityRole="button">
+                  {importMutation.isPending ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <>
+                      <Ionicons name="logo-youtube" size={18} color="#fff" />
+                      <Text style={styles.personaliseYouTubeBtnText}>
+                        Import Subscribed channels from YouTube
+                      </Text>
+                    </>
+                  )}
+                </Pressable>
+                <Pressable
+                  style={styles.personaliseManualBtn}
+                  onPress={() => router.push('/personalise')}
+                  accessibilityLabel="Manually personalise my feed"
+                  accessibilityRole="button">
+                  <Ionicons name="create-outline" size={18} color={Colors.primary} />
+                  <Text style={styles.personaliseManualBtnText}>
+                    Manually personalise my feed
+                  </Text>
+                </Pressable>
+              </View>
+            );
+          }
+
+          if (item.type === 'suggestion') {
+            const video = item.data;
+            const isFirst = index === 0 || feedItems[index - 1]?.type !== 'suggestion';
+            return (
+              <View key={`sug-${video.videoId}`}>
+                {isFirst && (
+                  <Text style={styles.suggestionHeader}>Suggested for you</Text>
+                )}
+              <Pressable
+                key={`sug-${video.videoId}`}
+                style={styles.suggestionCard}
+                onPress={() => router.push({ pathname: '/analyse', params: { url: `https://youtube.com/watch?v=${video.videoId}` } })}
+                accessibilityLabel={`Analyse ${video.title}`}
+                accessibilityRole="button">
+                <Image
+                  source={{ uri: video.thumbnailUrl }}
+                  style={styles.suggestionThumb}
+                  resizeMode="cover"
+                />
+                <View style={styles.suggestionInfo}>
+                  <Text style={styles.suggestionTitle} numberOfLines={2}>
+                    {video.title}
+                  </Text>
+                  <Text style={styles.suggestionChannel} numberOfLines={1}>
+                    {video.channelName}
+                    {video.durationLabel ? ` · ${video.durationLabel}` : ''}
                   </Text>
                 </View>
+                <View style={styles.analyseTag}>
+                  <Ionicons name="sparkles" size={12} color="#fff" />
+                  <Text style={styles.analyseTagText}>Analyse</Text>
+                </View>
+              </Pressable>
               </View>
-            </Pressable>
-          ))}
-        </ScrollView>
-      ) : (
-        <View style={styles.placeholder}>
-          <Ionicons
-            name="albums-outline"
-            size={32}
-            color={Colors.tabIconDefault}
-          />
-          <Text style={styles.placeholderText}>
-            Your reminder cards will appear here when you start summarising.
-          </Text>
-        </View>
-      )}
+            );
+          }
 
-      {/* Personalise your feed — shown when user hasn't picked interests */}
-      {!hasPersonalised && !hasSubscriptions && (
-        <>
-          <Text style={styles.sectionTitle}>Customise Your Feed</Text>
-          <View style={styles.onboardingCard}>
-            <View style={styles.onboardingIconRow}>
-              <View style={styles.onboardingIcon}>
-                <Ionicons name="sparkles" size={24} color={Colors.primary} />
-              </View>
-            </View>
-            <Text style={styles.onboardingTitle}>
-              Pick your goals & interests to{'\n'}customise your feed
-            </Text>
-            <Text style={styles.onboardingSubtitle}>
-              We'll show you summaries and channels that match what you care
-              about.
-            </Text>
-            <Pressable
-              style={styles.onboardingPrimaryBtn}
-              onPress={() => router.push('/personalise')}
-              accessibilityLabel="Personalise my feed"
-              accessibilityRole="button">
-              <Ionicons name="color-wand-outline" size={18} color="#fff" />
-              <Text style={styles.onboardingPrimaryText}>
-                Personalise my feed
-              </Text>
-            </Pressable>
-            <Pressable
-              style={styles.onboardingSecondaryBtn}
-              onPress={handleImportYouTube}
-              disabled={importMutation.isPending}
-              accessibilityLabel="Import subscribed channels from YouTube"
-              accessibilityRole="button">
-              {importMutation.isPending ? (
-                <ActivityIndicator color={Colors.primary} size="small" />
-              ) : (
-                <>
-                  <Ionicons name="logo-youtube" size={18} color={Colors.primary} />
-                  <Text style={styles.onboardingSecondaryText}>
-                    Import subscribed channels from YouTube
-                  </Text>
-                </>
-              )}
-            </Pressable>
-          </View>
-        </>
-      )}
+          if (item.type === 'refresher') {
+            const s = item.data;
+            const firstCard = s.refresherCards[0];
+            const totalCards = s.refresherCards.length;
+            return (
+              <Pressable
+                key={`r-${s.id}`}
+                style={styles.inlineRefresher}
+                onPress={() => router.push(`/refresher/${s.id}`)}
+                accessibilityLabel={`Refresher cards for ${s.videoTitle}`}
+                accessibilityRole="button">
+                <View style={styles.inlineRefresherTop}>
+                  <Image
+                    source={{ uri: s.thumbnailUrl }}
+                    style={styles.inlineRefresherThumb}
+                    resizeMode="cover"
+                  />
+                  <View style={styles.inlineRefresherMeta}>
+                    <Text style={styles.inlineRefresherVideoTitle} numberOfLines={2}>
+                      {s.videoTitle}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={styles.inlineRefresherQuestion} numberOfLines={2}>
+                  {firstCard?.title ?? 'Review your knowledge'}
+                </Text>
+                <Text style={styles.inlineRefresherLink}>
+                  View {totalCards > 1 ? `${totalCards - 1} others` : 'card'} from this video →
+                </Text>
+              </Pressable>
+            );
+          }
 
-      {/* New from Followed Channels — shows analysed + latest unanalysed videos */}
-      {hasSubscriptions && (
-        <>
-          <Text style={styles.sectionTitle}>New from Followed Channels</Text>
-          {followedFeedItems.length > 0 ? (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.horizontalScroll}
-              contentContainerStyle={styles.horizontalContent}>
-              {followedFeedItems.map((item) =>
-                item.type === 'summary' ? (
-                  <Pressable
-                    key={`s-${item.data.id}`}
-                    style={styles.channelCard}
-                    onPress={() => router.push(`/summary/${item.data.id}`)}
-                    accessibilityRole="button">
-                    <Image
-                      source={{ uri: item.data.thumbnailUrl }}
-                      style={styles.channelCardThumb}
-                      resizeMode="cover"
-                    />
-                    <View style={styles.channelCardInfo}>
-                      <Text style={styles.channelCardTitle} numberOfLines={2}>
-                        {item.data.videoTitle}
-                      </Text>
-                      <Text style={styles.channelCardChannel}>
-                        {item.data.channelName}
-                      </Text>
-                    </View>
-                  </Pressable>
-                ) : (
-                  <Pressable
-                    key={`v-${item.data.videoId}`}
-                    style={styles.videoCard}
-                    onPress={() =>
-                      router.push({
-                        pathname: '/analyse',
-                        params: {
-                          url: `https://youtube.com/watch?v=${item.data.videoId}`,
-                        },
-                      })
-                    }
-                    accessibilityLabel={`Analyse ${item.data.title}`}
-                    accessibilityRole="button">
-                    <Image
-                      source={{ uri: item.data.thumbnailUrl }}
-                      style={styles.channelCardThumb}
-                      resizeMode="cover"
-                    />
-                    {item.data.durationLabel ? (
-                      <View style={styles.durationBadge}>
-                        <Text style={styles.durationText}>
-                          {item.data.durationLabel}
-                        </Text>
-                      </View>
-                    ) : null}
-                    <View style={styles.channelCardInfo}>
-                      <Text style={styles.channelCardTitle} numberOfLines={2}>
-                        {item.data.title}
-                      </Text>
-                      <Text style={styles.channelCardChannel}>
-                        {item.data.channelName}
-                      </Text>
-                      <View style={styles.analyseTag}>
-                        <Ionicons
-                          name="sparkles-outline"
-                          size={12}
-                          color={Colors.primary}
-                        />
-                        <Text style={styles.analyseTagText}>Analyse</Text>
-                      </View>
-                    </View>
-                  </Pressable>
-                ),
-              )}
-            </ScrollView>
-          ) : (
-            <View style={styles.placeholder}>
-              <Ionicons
-                name="videocam-outline"
-                size={32}
-                color={Colors.tabIconDefault}
-              />
-              <Text style={styles.placeholderText}>
-                No videos from your followed channels yet. Tap a channel to
-                browse their latest videos.
-              </Text>
-            </View>
-          )}
-        </>
-      )}
-
-      {/* From the Community */}
-      <Text style={styles.sectionTitle}>From the Community</Text>
-      {communitySummariesFiltered.length > 0 ? (
-        communitySummariesFiltered
-          .slice(0, 10)
-          .map((s) => <VerticalVideoCard key={s.id} summary={s} />)
+          return null;
+        })
       ) : isCommunityLoading ? (
         <ActivityIndicator color={Colors.primary} style={styles.loader} />
       ) : (
@@ -444,109 +396,164 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: Colors.text,
-    marginBottom: 12,
-    marginTop: 8,
-  },
-  // Horizontal scrolls
-  horizontalScroll: {
-    marginHorizontal: -24,
-    marginBottom: 16,
-  },
-  horizontalContent: {
-    paddingHorizontal: 24,
+  // Personalise card
+  personaliseCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
     gap: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: Colors.primary + '20',
   },
-  refresherCard: {
-    width: 200,
+  personaliseIconRow: {
+    marginBottom: 4,
+  },
+  personaliseIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: Colors.primary + '12',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  personaliseTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: Colors.text,
+    textAlign: 'center',
+    lineHeight: 24,
+  },
+  personaliseSubtitle: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
+    paddingHorizontal: 8,
+  },
+  personaliseYouTubeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: Colors.primary,
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    width: '100%',
+    marginTop: 4,
+  },
+  personaliseYouTubeBtnText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  personaliseManualBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1.5,
+    borderColor: Colors.primary,
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    width: '100%',
+  },
+  personaliseManualBtnText: {
+    color: Colors.primary,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  // Inline refresher card
+  inlineRefresher: {
     backgroundColor: Colors.surface,
     borderRadius: 12,
-    overflow: 'hidden',
+    padding: 14,
+    gap: 10,
+    marginBottom: 16,
   },
-  refresherThumb: {
-    width: '100%',
-    height: 112,
+  inlineRefresherTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  inlineRefresherThumb: {
+    width: 60,
+    height: 40,
+    borderRadius: 6,
     backgroundColor: Colors.border,
   },
-  refresherInfo: {
-    padding: 10,
-    gap: 6,
+  inlineRefresherMeta: {
+    flex: 1,
   },
-  refresherTitle: {
+  inlineRefresherVideoTitle: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    lineHeight: 16,
+  },
+  inlineRefresherQuestion: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.text,
+    lineHeight: 20,
+  },
+  inlineRefresherLink: {
     fontSize: 13,
+    fontWeight: '600',
+    color: Colors.primary,
+  },
+  // Suggestion cards
+  suggestionHeader: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: Colors.text,
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  suggestionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    padding: 12,
+    gap: 12,
+    marginBottom: 12,
+  },
+  suggestionThumb: {
+    width: 100,
+    height: 56,
+    borderRadius: 8,
+    backgroundColor: Colors.border,
+  },
+  suggestionInfo: {
+    flex: 1,
+    gap: 4,
+  },
+  suggestionTitle: {
+    fontSize: 14,
     fontWeight: '600',
     color: Colors.text,
     lineHeight: 18,
   },
-  refresherBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  refresherCount: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: Colors.primary,
-  },
-  // Channel + video cards
-  channelCard: {
-    width: 220,
-    backgroundColor: Colors.surface,
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  channelCardThumb: {
-    width: '100%',
-    height: 124,
-    backgroundColor: Colors.border,
-  },
-  channelCardInfo: {
-    padding: 10,
-    gap: 4,
-  },
-  channelCardTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.text,
-    lineHeight: 19,
-  },
-  channelCardChannel: {
+  suggestionChannel: {
     fontSize: 12,
     color: Colors.textSecondary,
-  },
-  videoCard: {
-    width: 220,
-    backgroundColor: Colors.surface,
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  durationBadge: {
-    position: 'absolute',
-    top: 100,
-    right: 8,
-    backgroundColor: 'rgba(0,0,0,0.75)',
-    borderRadius: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
-  durationText: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: '600',
   },
   analyseTag: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginTop: 2,
+    backgroundColor: Colors.primary,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
   },
   analyseTagText: {
     fontSize: 12,
     fontWeight: '600',
-    color: Colors.primary,
+    color: '#fff',
   },
   // Placeholders
   placeholder: {
@@ -562,76 +569,6 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     textAlign: 'center',
     lineHeight: 20,
-  },
-  // Onboarding card
-  onboardingCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: 16,
-    padding: 24,
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: Colors.primary + '20',
-  },
-  onboardingIconRow: {
-    marginBottom: 4,
-  },
-  onboardingIcon: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: Colors.primary + '12',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  onboardingTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: Colors.text,
-    textAlign: 'center',
-    lineHeight: 24,
-  },
-  onboardingSubtitle: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 20,
-    paddingHorizontal: 8,
-  },
-  onboardingPrimaryBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: Colors.primary,
-    borderRadius: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 24,
-    width: '100%',
-    marginTop: 4,
-  },
-  onboardingPrimaryText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  onboardingSecondaryBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    borderWidth: 1.5,
-    borderColor: Colors.primary,
-    borderRadius: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 24,
-    width: '100%',
-  },
-  onboardingSecondaryText: {
-    color: Colors.primary,
-    fontSize: 14,
-    fontWeight: '600',
   },
   // Community
   loader: {

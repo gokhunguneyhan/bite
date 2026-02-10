@@ -22,17 +22,38 @@ export interface Summary {
 }
 
 export const CATEGORIES = [
-  'Tech',
-  'Business',
-  'Science',
-  'Self-improvement',
-  'Health',
-  'Finance',
-  'Education',
-  'Entertainment',
-  'Productivity',
+  'Technology & AI',
+  'Business & Startups',
+  'Finance & Investing',
+  'Science & Space',
+  'Health & Fitness',
+  'Self-Improvement',
+  'Education & Learning',
+  'Creative & Design',
+  'Politics & Society',
+  'Entertainment & Media',
+  'Lifestyle & Culture',
+  'Career & Professional Growth',
   'Other',
 ] as const;
+
+/** Map old category names to new ones for backward compatibility */
+const OLD_TO_NEW: Record<string, string> = {
+  'Tech': 'Technology & AI',
+  'Business': 'Business & Startups',
+  'Finance': 'Finance & Investing',
+  'Science': 'Science & Space',
+  'Health': 'Health & Fitness',
+  'Self-improvement': 'Self-Improvement',
+  'Education': 'Education & Learning',
+  'Entertainment': 'Entertainment & Media',
+  'Productivity': 'Self-Improvement',
+};
+
+export function normalizeCategory(raw: string | undefined): string {
+  if (!raw) return 'Other';
+  return OLD_TO_NEW[raw] ?? raw;
+}
 
 export type Category = (typeof CATEGORIES)[number];
 

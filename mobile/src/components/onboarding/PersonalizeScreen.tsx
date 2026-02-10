@@ -13,55 +13,14 @@ import { useState, useRef } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/src/constants/colors';
 import { useSavePreferences } from '@/src/hooks/usePreferences';
+import { MAIN_CATEGORIES, SUBCATEGORIES, type MainCategory } from '@/src/constants/categories';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
-const INTEREST_OPTIONS = [
-  'Technology',
-  'Business',
-  'Finance',
-  'Science',
-  'Health',
-  'Self-improvement',
-  'Productivity',
-  'Education',
-  'Entertainment',
-  'Politics',
-  'Sports',
-  'Cooking',
-  'Travel',
-  'Art & Design',
-  'Music',
-];
-
-const GOAL_OPTIONS = [
-  'Learn new skills',
-  'Stay informed',
-  'Career growth',
-  'Personal development',
-  'Entertainment',
-  'Research',
-  'Save time on long videos',
-  'Build better habits',
-];
-
-const CATEGORY_OPTIONS = [
-  'Tech',
-  'Business',
-  'Science',
-  'Self-improvement',
-  'Health',
-  'Finance',
-  'Education',
-  'Entertainment',
-  'Productivity',
-];
 
 interface StepConfig {
   icon: keyof typeof Ionicons.glyphMap;
   title: string;
   subtitle: string;
-  options: string[];
 }
 
 const STEPS: StepConfig[] = [
@@ -69,23 +28,15 @@ const STEPS: StepConfig[] = [
     icon: 'sparkles-outline',
     title: 'What are you\ninterested in?',
     subtitle: 'Pick topics that excite you. This helps us personalize your experience.',
-    options: INTEREST_OPTIONS,
-  },
-  {
-    icon: 'rocket-outline',
-    title: "What are\nyour goals?",
-    subtitle: 'Tell us what you want to achieve with video summaries.',
-    options: GOAL_OPTIONS,
   },
   {
     icon: 'grid-outline',
-    title: 'Pick your favorite\ncategories',
-    subtitle: "We'll highlight summaries that match your preferences.",
-    options: CATEGORY_OPTIONS,
+    title: 'Refine your\ninterests',
+    subtitle: "Pick subcategories to fine-tune your feed.",
   },
 ];
 
-const TOTAL_STEPS = STEPS.length;
+const TOTAL_STEPS = 2;
 
 interface PersonalizeScreenProps {
   onComplete: () => void;
@@ -94,24 +45,25 @@ interface PersonalizeScreenProps {
 export default function PersonalizeScreen({ onComplete }: PersonalizeScreenProps) {
   const [step, setStep] = useState(0);
   const [interests, setInterests] = useState<string[]>([]);
-  const [goals, setGoals] = useState<string[]>([]);
-  const [categories, setCategories] = useState<string[]>([]);
+  const [subcategories, setSubcategories] = useState<string[]>([]);
   const slideAnim = useRef(new Animated.Value(0)).current;
   const saveMutation = useSavePreferences();
 
-  const selections = [interests, goals, categories];
-  const setters = [setInterests, setGoals, setCategories];
-
-  const currentSelections = selections[step];
   const currentConfig = STEPS[step];
 
-  const toggleChip = (value: string) => {
-    const setter = setters[step];
-    const current = selections[step];
-    if (current.includes(value)) {
-      setter(current.filter((v) => v !== value));
+  const toggleInterest = (value: string) => {
+    if (interests.includes(value)) {
+      setInterests(interests.filter((v) => v !== value));
     } else {
-      setter([...current, value]);
+      setInterests([...interests, value]);
+    }
+  };
+
+  const toggleSubcategory = (value: string) => {
+    if (subcategories.includes(value)) {
+      setSubcategories(subcategories.filter((v) => v !== value));
+    } else {
+      setSubcategories([...subcategories, value]);
     }
   };
 
@@ -157,8 +109,8 @@ export default function PersonalizeScreen({ onComplete }: PersonalizeScreenProps
     saveMutation.mutate(
       {
         interests,
-        goals,
-        preferredCategories: categories,
+        goals: [],
+        preferredCategories: subcategories,
       },
       {
         onSuccess: () => {
@@ -173,6 +125,74 @@ export default function PersonalizeScreen({ onComplete }: PersonalizeScreenProps
 
   const isLast = step === TOTAL_STEPS - 1;
   const isSaving = saveMutation.isPending;
+
+  const renderStepContent = () => {
+    if (step === 0) {
+      return (
+        <ScrollView
+          style={styles.chipsScroll}
+          contentContainerStyle={styles.chipsContainer}
+          showsVerticalScrollIndicator={false}>
+          {MAIN_CATEGORIES.map((category) => {
+            const selected = interests.includes(category);
+            return (
+              <Pressable
+                key={category}
+                style={[styles.chip, selected && styles.chipSelected]}
+                onPress={() => toggleInterest(category)}>
+                <Text
+                  style={[
+                    styles.chipText,
+                    selected && styles.chipTextSelected,
+                  ]}>
+                  {category}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      );
+    }
+
+    // Step 2: Subcategories grouped by selected main categories
+    return (
+      <ScrollView
+        style={styles.chipsScroll}
+        showsVerticalScrollIndicator={false}>
+        {interests.map((category) => {
+          const subs = SUBCATEGORIES[category as MainCategory];
+          if (!subs) return null;
+          return (
+            <View key={category} style={styles.subcategorySection}>
+              <Text style={styles.sectionTitle}>{category}</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.horizontalChipsContainer}>
+                {subs.map((sub) => {
+                  const selected = subcategories.includes(sub);
+                  return (
+                    <Pressable
+                      key={sub}
+                      style={[styles.chip, selected && styles.chipSelected]}
+                      onPress={() => toggleSubcategory(sub)}>
+                      <Text
+                        style={[
+                          styles.chipText,
+                          selected && styles.chipTextSelected,
+                        ]}>
+                        {sub}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          );
+        })}
+      </ScrollView>
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -208,28 +228,7 @@ export default function PersonalizeScreen({ onComplete }: PersonalizeScreenProps
         <Text style={styles.title}>{currentConfig.title}</Text>
         <Text style={styles.subtitle}>{currentConfig.subtitle}</Text>
 
-        <ScrollView
-          style={styles.chipsScroll}
-          contentContainerStyle={styles.chipsContainer}
-          showsVerticalScrollIndicator={false}>
-          {currentConfig.options.map((option) => {
-            const selected = currentSelections.includes(option);
-            return (
-              <Pressable
-                key={option}
-                style={[styles.chip, selected && styles.chipSelected]}
-                onPress={() => toggleChip(option)}>
-                <Text
-                  style={[
-                    styles.chipText,
-                    selected && styles.chipTextSelected,
-                  ]}>
-                  {option}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+        {renderStepContent()}
       </Animated.View>
 
       {/* Actions */}
@@ -344,6 +343,20 @@ const styles = StyleSheet.create({
   },
   chipTextSelected: {
     color: '#fff',
+  },
+  subcategorySection: {
+    marginBottom: 20,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.text,
+    marginBottom: 10,
+  },
+  horizontalChipsContainer: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingRight: 16,
   },
   actions: {
     gap: 12,

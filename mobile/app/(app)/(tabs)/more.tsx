@@ -4,6 +4,7 @@ import {
   Pressable,
   ScrollView,
   Alert,
+  Linking,
   StyleSheet,
 } from 'react-native';
 import { useState } from 'react';
@@ -31,14 +32,16 @@ export default function MoreScreen() {
   const handleDeleteData = () => {
     Alert.alert(
       'Delete My Data',
-      'This will permanently delete all your data. This action cannot be undone.',
+      'This will send a data deletion request to our team. Your account and all associated data will be permanently removed within 30 days. This action cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Delete',
+          text: 'Request Deletion',
           style: 'destructive',
-          onPress: () =>
-            showToast('Data deletion requested. We will process this shortly.'),
+          onPress: () => {
+            Linking.openURL('mailto:support@ytsummarise.com?subject=Data%20Deletion%20Request');
+            showToast('Data deletion requested. Check your email for confirmation.');
+          },
         },
       ],
     );
@@ -54,7 +57,7 @@ export default function MoreScreen() {
           accessibilityLabel="Change summary language"
           accessibilityRole="button">
           <Ionicons name="language-outline" size={20} color={Colors.text} />
-          <Text style={styles.rowLabel}>Summary Language</Text>
+          <Text style={styles.rowLabel}>Primary summary language</Text>
           <Text style={styles.rowValue}>{currentLang?.label}</Text>
           <Ionicons
             name={showLangPicker ? 'chevron-up' : 'chevron-down'}
@@ -113,7 +116,7 @@ export default function MoreScreen() {
         </Pressable>
       </View>
 
-      <Text style={styles.sectionTitle}>Legal</Text>
+      <Text style={styles.sectionTitle}>Other</Text>
       <View style={styles.card}>
         <Pressable
           style={styles.row}
@@ -133,7 +136,7 @@ export default function MoreScreen() {
           />
         </Pressable>
         <Pressable
-          style={[styles.row, styles.rowLast]}
+          style={styles.row}
           onPress={() => showToast('Coming soon')}
           accessibilityLabel="Privacy policy"
           accessibilityRole="button">
@@ -149,10 +152,6 @@ export default function MoreScreen() {
             color={Colors.tabIconDefault}
           />
         </Pressable>
-      </View>
-
-      <Text style={styles.sectionTitle}>About</Text>
-      <View style={styles.card}>
         <View style={[styles.row, styles.rowLast]}>
           <Ionicons
             name="information-circle-outline"

@@ -8,28 +8,28 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const SLIDES = [
   {
-    icon: 'sparkles' as const,
-    title: 'Never miss\nwhat matters',
+    icon: 'time' as const,
+    title: "That Watch Later list\nisn't going to\nwatch itself",
     subtitle:
-      'Contextual summaries preserve reasoning, stories, and connections — not just bullet points.',
+      'Get the insights from any YouTube video in minutes. No backlog, no guilt.',
   },
   {
-    icon: 'albums' as const,
-    title: 'Remember\neverything',
+    icon: 'sparkles' as const,
+    title: "Most summaries suck.\nOurs don't.",
     subtitle:
-      'Refresher cards help you retain key insights using spaced repetition, powered by science.',
+      "No shallow bullet points. We preserve the reasoning, stories, and connections that actually matter.",
   },
   {
     icon: 'people' as const,
-    title: 'Learn from\nthe community',
+    title: 'Not ready to pay?\nUse community\nsummaries.',
     subtitle:
-      'Discover analyses from other learners. Follow creators and channels you care about.',
+      'Free access to summaries created by other learners. No limits.',
   },
   {
     icon: 'time' as const,
     title: 'Your time,\nreclaimed',
     subtitle:
-      'The average YouTube video is 15 minutes. A summary takes 2. Do the math.',
+      "15-minute video → 2-minute summary. That's hours saved monthly while actually learning something.",
   },
 ] as const;
 

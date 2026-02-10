@@ -5,6 +5,7 @@ import {
   ScrollView,
   FlatList,
   Image,
+  ActivityIndicator,
   StyleSheet,
 } from 'react-native';
 import { useState, useMemo, useCallback } from 'react';
@@ -12,14 +13,17 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSession } from '@/src/providers/SessionProvider';
 import { Colors } from '@/src/constants/colors';
-import { useSummaries, useSubscriptions } from '@/src/hooks/useSummary';
+import { useSummaries, useSubscriptions, useImportYouTubeSubscriptions } from '@/src/hooks/useSummary';
+import { usePreferences, useOnboardingStatus } from '@/src/hooks/usePreferences';
+import { useToast } from '@/src/components/ui/Toast';
 import { useBookmarkStore, type Bookmark } from '@/src/stores/bookmarkStore';
 import { useUserFollowStore } from '@/src/stores/userFollowStore';
-import { SummaryCard } from '@/src/components/summary/SummaryCard';
+import { VerticalVideoCard } from '@/src/components/summary/VerticalVideoCard';
 import { SwipeableRow } from '@/src/components/summary/SwipeableRow';
 import type { Summary } from '@/src/types/summary';
 
-type ProfileTab = 'history' | 'bookmarks' | 'refresher';
+type ProfileTab = 'summaries' | 'saved';
+type SavedFilter = 'all' | 'videos' | 'sections' | 'refreshers';
 
 export default function ProfileScreen() {
   const { user, profile } = useSession();
@@ -28,8 +32,13 @@ export default function ProfileScreen() {
   const bookmarks = useBookmarkStore((s) => s.bookmarks);
   const removeBookmark = useBookmarkStore((s) => s.removeBookmark);
   const follows = useUserFollowStore((s) => s.follows);
+  const { data: preferences } = usePreferences();
+  const { data: hasOnboarded } = useOnboardingStatus();
+  const showToast = useToast();
+  const importMutation = useImportYouTubeSubscriptions();
 
-  const [activeTab, setActiveTab] = useState<ProfileTab>('history');
+  const [activeTab, setActiveTab] = useState<ProfileTab>('summaries');
+  const [savedFilter, setSavedFilter] = useState<SavedFilter>('all');
 
   const displayName = profile?.full_name || user?.email?.split('@')[0] || 'User';
   const displayEmail = user?.email || '';
@@ -40,38 +49,40 @@ export default function ProfileScreen() {
   // TODO: Replace with real data from Supabase
   const followersCount = 0;
 
-  // Stats calculations
-  const stats = useMemo(() => {
-    if (!summaries || summaries.length === 0)
-      return { hours: '0', words: '0' };
+  const hasPersonalised = hasOnboarded === true;
+  const hasSubscriptions = (subscriptions?.length ?? 0) > 0;
 
-    // Estimate: average video ~15 min each
+  const handleImportYouTube = () => {
+    importMutation.mutate(undefined, {
+      onSuccess: (imported) => showToast(`Imported ${imported.length} channels`),
+      onError: () => showToast('Failed to import channels'),
+    });
+  };
+
+  // Hours saved calculation
+  const hoursSaved = useMemo(() => {
+    if (!summaries || summaries.length === 0) return '0';
     const totalMinutes = summaries.length * 15;
-    const hours =
-      totalMinutes >= 60
-        ? `${Math.round(totalMinutes / 60)}`
-        : `${totalMinutes}m`;
-
-    // Count words across quickSummary + all contextualSections
-    let wordCount = 0;
-    for (const s of summaries) {
-      if (s.quickSummary) wordCount += s.quickSummary.split(/\s+/).length;
-      for (const section of s.contextualSections ?? []) {
-        if (section.content) wordCount += section.content.split(/\s+/).length;
-      }
-    }
-    const words =
-      wordCount >= 1000
-        ? `${(wordCount / 1000).toFixed(1)}k`
-        : `${wordCount}`;
-
-    return { hours, words };
+    return totalMinutes >= 60
+      ? `${Math.round(totalMinutes / 60)}`
+      : `${totalMinutes}m`;
   }, [summaries]);
 
   // Refresher card summaries
   const refresherSummaries = useMemo(
     () => (summaries ?? []).filter((s) => s.refresherCards?.length > 0),
     [summaries],
+  );
+
+  // Filtered bookmarks for the Saved tab
+  const videoBookmarks = useMemo(
+    () => bookmarks.filter((b) => b.sectionIndex === undefined || b.sectionTitle === b.videoTitle),
+    [bookmarks],
+  );
+
+  const sectionBookmarks = useMemo(
+    () => bookmarks.filter((b) => b.sectionTitle && b.sectionTitle !== b.videoTitle),
+    [bookmarks],
   );
 
   const renderBookmarkItem = useCallback(
@@ -129,9 +140,193 @@ export default function ProfileScreen() {
     [],
   );
 
+  const renderSavedContent = () => {
+    const filters: { key: SavedFilter; label: string }[] = [
+      { key: 'all', label: 'All' },
+      { key: 'videos', label: 'Videos' },
+      { key: 'sections', label: 'Sections' },
+      { key: 'refreshers', label: 'Refreshers' },
+    ];
+
+    let content: React.ReactNode;
+
+    switch (savedFilter) {
+      case 'all': {
+        const hasBookmarks = bookmarks.length > 0;
+        const hasRefreshers = refresherSummaries.length > 0;
+        if (!hasBookmarks && !hasRefreshers) {
+          content = (
+            <View style={styles.emptyState}>
+              <Ionicons name="bookmark-outline" size={48} color={Colors.border} />
+              <Text style={styles.emptyTitle}>Nothing saved yet</Text>
+              <Text style={styles.emptySubtext}>
+                Bookmark sections or generate refresher cards to see them here.
+              </Text>
+            </View>
+          );
+        } else {
+          content = (
+            <View style={styles.tabContent}>
+              {bookmarks.map((b) => (
+                <SwipeableRow
+                  key={b.id}
+                  onDelete={() => removeBookmark(b.summaryId, b.sectionIndex)}>
+                  <Pressable
+                    style={styles.bookmarkRow}
+                    onPress={() => router.push(`/summary/${b.summaryId}`)}
+                    accessibilityLabel={`View bookmark: ${b.sectionTitle}`}
+                    accessibilityRole="button">
+                    <View style={styles.bookmarkContent}>
+                      <Text style={styles.bookmarkTitle} numberOfLines={1}>
+                        {b.videoTitle}
+                      </Text>
+                      <Text style={styles.bookmarkSection} numberOfLines={1}>
+                        {b.sectionTitle}
+                      </Text>
+                      <Text style={styles.bookmarkSnippet} numberOfLines={2}>
+                        {b.sectionContent}
+                      </Text>
+                    </View>
+                  </Pressable>
+                </SwipeableRow>
+              ))}
+              {refresherSummaries.map((s) => (
+                <Pressable
+                  key={`refresher-${s.id}`}
+                  style={styles.refresherRow}
+                  onPress={() => router.push(`/refresher/${s.id}`)}
+                  accessibilityLabel={`Review ${s.refresherCards.length} cards for ${s.videoTitle}`}
+                  accessibilityRole="button">
+                  <Image
+                    source={{ uri: s.thumbnailUrl }}
+                    style={styles.refresherThumb}
+                    resizeMode="cover"
+                  />
+                  <View style={styles.refresherInfo}>
+                    <Text style={styles.refresherTitle} numberOfLines={2}>
+                      {s.videoTitle}
+                    </Text>
+                    <View style={styles.refresherMeta}>
+                      <Ionicons name="albums-outline" size={14} color={Colors.primary} />
+                      <Text style={styles.refresherCardCount}>
+                        {s.refresherCards.length} cards
+                      </Text>
+                    </View>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={Colors.textSecondary} />
+                </Pressable>
+              ))}
+            </View>
+          );
+        }
+        break;
+      }
+      case 'videos': {
+        if (videoBookmarks.length === 0) {
+          content = (
+            <View style={styles.emptyState}>
+              <Ionicons name="videocam-outline" size={48} color={Colors.border} />
+              <Text style={styles.emptyTitle}>No video bookmarks</Text>
+              <Text style={styles.emptySubtext}>
+                Bookmark full summaries to find them here.
+              </Text>
+            </View>
+          );
+        } else {
+          content = (
+            <FlatList
+              data={videoBookmarks}
+              keyExtractor={(item) => item.id}
+              renderItem={renderBookmarkItem}
+              scrollEnabled={false}
+              contentContainerStyle={styles.tabContent}
+            />
+          );
+        }
+        break;
+      }
+      case 'sections': {
+        if (sectionBookmarks.length === 0) {
+          content = (
+            <View style={styles.emptyState}>
+              <Ionicons name="list-outline" size={48} color={Colors.border} />
+              <Text style={styles.emptyTitle}>No section bookmarks</Text>
+              <Text style={styles.emptySubtext}>
+                Bookmark specific sections from summaries to find them here.
+              </Text>
+            </View>
+          );
+        } else {
+          content = (
+            <FlatList
+              data={sectionBookmarks}
+              keyExtractor={(item) => item.id}
+              renderItem={renderBookmarkItem}
+              scrollEnabled={false}
+              contentContainerStyle={styles.tabContent}
+            />
+          );
+        }
+        break;
+      }
+      case 'refreshers': {
+        if (refresherSummaries.length === 0) {
+          content = (
+            <View style={styles.emptyState}>
+              <Ionicons name="albums-outline" size={48} color={Colors.border} />
+              <Text style={styles.emptyTitle}>No refresher cards yet</Text>
+              <Text style={styles.emptySubtext}>
+                Analyse videos to generate refresher cards.
+              </Text>
+            </View>
+          );
+        } else {
+          content = (
+            <FlatList
+              data={refresherSummaries}
+              keyExtractor={(item) => item.id}
+              renderItem={renderRefresherItem}
+              scrollEnabled={false}
+              contentContainerStyle={styles.tabContent}
+            />
+          );
+        }
+        break;
+      }
+    }
+
+    return (
+      <>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chipRow}
+          style={styles.chipScroll}>
+          {filters.map((f) => {
+            const selected = savedFilter === f.key;
+            return (
+              <Pressable
+                key={f.key}
+                style={[styles.chip, selected && styles.chipSelected]}
+                onPress={() => setSavedFilter(f.key)}
+                accessibilityLabel={f.label}
+                accessibilityRole="button"
+                accessibilityState={{ selected }}>
+                <Text style={[styles.chipText, selected && styles.chipTextSelected]}>
+                  {f.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+        {content}
+      </>
+    );
+  };
+
   const renderTabContent = () => {
     switch (activeTab) {
-      case 'history':
+      case 'summaries':
         if (!summaries || summaries.length === 0) {
           return (
             <View style={styles.emptyState}>
@@ -146,54 +341,13 @@ export default function ProfileScreen() {
         return (
           <View style={styles.tabContent}>
             {summaries.map((s) => (
-              <SummaryCard key={s.id} summary={s} />
+              <VerticalVideoCard key={s.id} summary={s} />
             ))}
           </View>
         );
 
-      case 'bookmarks':
-        if (bookmarks.length === 0) {
-          return (
-            <View style={styles.emptyState}>
-              <Ionicons name="bookmark-outline" size={48} color={Colors.border} />
-              <Text style={styles.emptyTitle}>No bookmarks yet</Text>
-              <Text style={styles.emptySubtext}>
-                Bookmark sections from your summaries to find them here.
-              </Text>
-            </View>
-          );
-        }
-        return (
-          <FlatList
-            data={bookmarks}
-            keyExtractor={(item) => item.id}
-            renderItem={renderBookmarkItem}
-            scrollEnabled={false}
-            contentContainerStyle={styles.tabContent}
-          />
-        );
-
-      case 'refresher':
-        if (refresherSummaries.length === 0) {
-          return (
-            <View style={styles.emptyState}>
-              <Ionicons name="albums-outline" size={48} color={Colors.border} />
-              <Text style={styles.emptyTitle}>No refresher cards yet</Text>
-              <Text style={styles.emptySubtext}>
-                Analyse videos to generate refresher cards.
-              </Text>
-            </View>
-          );
-        }
-        return (
-          <FlatList
-            data={refresherSummaries}
-            keyExtractor={(item) => item.id}
-            renderItem={renderRefresherItem}
-            scrollEnabled={false}
-            contentContainerStyle={styles.tabContent}
-          />
-        );
+      case 'saved':
+        return renderSavedContent();
     }
   };
 
@@ -208,53 +362,89 @@ export default function ProfileScreen() {
         {displayEmail ? <Text style={styles.email}>{displayEmail}</Text> : null}
       </View>
 
-      {/* Stats Row */}
-      <View style={styles.statsRow}>
-        <View style={styles.stat}>
-          <Text style={styles.statNumber}>{summaryCount}</Text>
-          <Text style={styles.statLabel}>Summaries</Text>
-        </View>
-        <View style={styles.statDivider} />
-        <View style={styles.stat}>
-          <Text style={styles.statNumber}>{stats.hours}</Text>
-          <Text style={styles.statLabel}>Hours saved</Text>
-        </View>
-        <View style={styles.statDivider} />
-        <View style={styles.stat}>
-          <Text style={styles.statNumber}>{stats.words}</Text>
-          <Text style={styles.statLabel}>Words read</Text>
-        </View>
-      </View>
-
-      {/* Social Section */}
-      <View style={styles.socialRow}>
+      {/* Combined Metrics Row */}
+      <View style={styles.metricsRow}>
         <Pressable
-          style={styles.socialItem}
+          style={styles.metric}
           onPress={() => router.push('/following')}
           accessibilityLabel={`${followingCount} following`}
           accessibilityRole="button">
-          <Text style={styles.socialNumber}>{followingCount}</Text>
-          <Text style={styles.socialLabel}>Following</Text>
+          <Text style={styles.metricNumber}>{followingCount}</Text>
+          <Text style={styles.metricLabel}> Following</Text>
         </Pressable>
-        <View style={styles.socialDivider} />
         <Pressable
-          style={styles.socialItem}
+          style={styles.metric}
           onPress={() => router.push('/followers')}
           accessibilityLabel={`${followersCount} followers`}
           accessibilityRole="button">
-          <Text style={styles.socialNumber}>{followersCount}</Text>
-          <Text style={styles.socialLabel}>Followers</Text>
+          <Text style={styles.metricNumber}>{followersCount}</Text>
+          <Text style={styles.metricLabel}> Followers</Text>
         </Pressable>
+        <View style={styles.metric}>
+          <Text style={styles.metricNumber}>{summaryCount}</Text>
+          <Text style={styles.metricLabel}> Summaries</Text>
+        </View>
+        <View style={styles.metric}>
+          <Text style={styles.metricLabelLight}>{hoursSaved} hours caught up</Text>
+        </View>
       </View>
+
+      {/* Setup Banner */}
+      {(!hasPersonalised || !hasSubscriptions) && (
+        <View style={styles.setupCard}>
+          <Ionicons name="construct-outline" size={20} color={Colors.primary} />
+          <View style={styles.setupContent}>
+            <Text style={styles.setupTitle}>Complete your setup</Text>
+            <View style={styles.setupActions}>
+              {!hasPersonalised && (
+                <Pressable
+                  style={styles.setupBtn}
+                  onPress={() => router.push('/personalise')}
+                  accessibilityLabel="Personalise your feed"
+                  accessibilityRole="button">
+                  <Ionicons name="sparkles-outline" size={14} color={Colors.primary} />
+                  <Text style={styles.setupBtnText}>Personalise feed</Text>
+                </Pressable>
+              )}
+              {!hasSubscriptions && (
+                <Pressable
+                  style={styles.setupBtn}
+                  onPress={handleImportYouTube}
+                  disabled={importMutation.isPending}
+                  accessibilityLabel="Import YouTube subscriptions"
+                  accessibilityRole="button">
+                  {importMutation.isPending ? (
+                    <ActivityIndicator color={Colors.primary} size="small" />
+                  ) : (
+                    <>
+                      <Ionicons name="logo-youtube" size={14} color={Colors.primary} />
+                      <Text style={styles.setupBtnText}>Import channels</Text>
+                    </>
+                  )}
+                </Pressable>
+              )}
+            </View>
+          </View>
+        </View>
+      )}
+      {hasPersonalised && hasSubscriptions && (
+        <Pressable
+          style={styles.manageLink}
+          onPress={() => router.push('/personalise')}
+          accessibilityLabel="Manage preferences"
+          accessibilityRole="button">
+          <Ionicons name="settings-outline" size={14} color={Colors.primary} />
+          <Text style={styles.manageLinkText}>Manage preferences</Text>
+        </Pressable>
+      )}
 
       {/* Tab Switcher */}
       <View style={styles.tabBar}>
-        {(['history', 'bookmarks', 'refresher'] as const).map((tab) => {
+        {(['summaries', 'saved'] as const).map((tab) => {
           const isActive = activeTab === tab;
           const labels = {
-            history: 'History',
-            bookmarks: 'Bookmarks',
-            refresher: 'Refresher Cards',
+            summaries: 'Summaries',
+            saved: 'Saved',
           };
           return (
             <Pressable
@@ -274,17 +464,6 @@ export default function ProfileScreen() {
 
       {/* Tab Content */}
       {renderTabContent()}
-
-      {/* Settings Link */}
-      <Pressable
-        style={styles.settingsLink}
-        onPress={() => router.push('/(app)/(tabs)/more')}
-        accessibilityLabel="Settings and More"
-        accessibilityRole="button">
-        <Ionicons name="settings-outline" size={20} color={Colors.text} />
-        <Text style={styles.settingsText}>Settings & More</Text>
-        <Ionicons name="chevron-forward" size={18} color={Colors.textSecondary} />
-      </Pressable>
     </ScrollView>
   );
 }
@@ -326,59 +505,80 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     marginTop: 4,
   },
-  statsRow: {
+  metricsRow: {
     flexDirection: 'row',
-    backgroundColor: Colors.surface,
-    borderRadius: 12,
-    padding: 18,
-    marginBottom: 10,
+    flexWrap: 'wrap',
+    gap: 16,
+    marginVertical: 16,
   },
-  stat: {
-    flex: 1,
+  metric: {
+    flexDirection: 'row',
     alignItems: 'center',
   },
-  statNumber: {
-    fontSize: 20,
+  metricNumber: {
+    fontSize: 15,
     fontWeight: '700',
     color: Colors.text,
   },
-  statLabel: {
-    fontSize: 12,
+  metricLabel: {
+    fontSize: 15,
     color: Colors.textSecondary,
-    marginTop: 4,
   },
-  statDivider: {
-    width: StyleSheet.hairlineWidth,
-    backgroundColor: Colors.border,
-    marginHorizontal: 12,
+  metricLabelLight: {
+    fontSize: 15,
+    color: Colors.textSecondary,
   },
-  socialRow: {
+  setupCard: {
     flexDirection: 'row',
-    backgroundColor: Colors.surface,
+    backgroundColor: Colors.primary + '08',
     borderRadius: 12,
     padding: 14,
-    marginBottom: 20,
+    gap: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: Colors.primary + '20',
   },
-  socialItem: {
+  setupContent: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 4,
+    gap: 8,
   },
-  socialNumber: {
-    fontSize: 16,
-    fontWeight: '700',
+  setupTitle: {
+    fontSize: 14,
+    fontWeight: '600',
     color: Colors.text,
   },
-  socialLabel: {
-    fontSize: 14,
-    color: Colors.textSecondary,
+  setupActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
   },
-  socialDivider: {
-    width: StyleSheet.hairlineWidth,
-    backgroundColor: Colors.border,
+  setupBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: Colors.surface,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: Colors.primary + '30',
+  },
+  setupBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.primary,
+  },
+  manageLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 16,
+    alignSelf: 'flex-start',
+  },
+  manageLinkText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: Colors.primary,
   },
   tabBar: {
     flexDirection: 'row',
@@ -406,6 +606,32 @@ const styles = StyleSheet.create({
   },
   tabContent: {
     gap: 0,
+  },
+  chipScroll: {
+    marginBottom: 12,
+  },
+  chipRow: {
+    gap: 8,
+  },
+  chip: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 24,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  chipSelected: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  chipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.textSecondary,
+  },
+  chipTextSelected: {
+    color: '#FFFFFF',
   },
   emptyState: {
     alignItems: 'center',
@@ -484,20 +710,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: Colors.primary,
-  },
-  settingsLink: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.surface,
-    borderRadius: 12,
-    padding: 16,
-    marginTop: 20,
-    gap: 12,
-  },
-  settingsText: {
-    flex: 1,
-    fontSize: 16,
-    color: Colors.text,
-    fontWeight: '500',
   },
 });

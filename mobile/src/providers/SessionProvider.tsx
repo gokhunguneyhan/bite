@@ -10,6 +10,10 @@ import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/src/lib/supabase';
 import { googleSignIn, signOutGoogle } from '@/src/services/googleAuthService';
 import { appleSignIn, isAppleAuthAvailable } from '@/src/services/appleAuthService';
+import { useBookmarkStore } from '@/src/stores/bookmarkStore';
+import { useLikeStore } from '@/src/stores/likeStore';
+import { useUserFollowStore } from '@/src/stores/userFollowStore';
+import { useYouTubeStore } from '@/src/stores/youtubeStore';
 
 interface Profile {
   id: string;
@@ -126,6 +130,11 @@ export function SessionProvider({ children }: PropsWithChildren) {
 
   function signOut() {
     signOutGoogle();
+    // Clear all user-scoped local stores so next user starts fresh
+    useBookmarkStore.getState().clear();
+    useLikeStore.getState().clear();
+    useUserFollowStore.getState().clear();
+    useYouTubeStore.getState().clear();
     supabase.auth.signOut();
   }
 

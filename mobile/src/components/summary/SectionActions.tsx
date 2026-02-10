@@ -1,4 +1,4 @@
-import { View, Text, Pressable, Share, StyleSheet } from 'react-native';
+import { View, Text, Pressable, Share, Linking, StyleSheet } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/src/constants/colors';
@@ -12,6 +12,8 @@ interface Props {
   sectionContent: string;
   videoTitle: string;
   channelName: string;
+  videoId: string;
+  timestampStart: number;
 }
 
 export function SectionActions({
@@ -21,6 +23,8 @@ export function SectionActions({
   sectionContent,
   videoTitle,
   channelName,
+  videoId,
+  timestampStart,
 }: Props) {
   const showToast = useToast();
   const isBookmarked = useBookmarkStore((s) =>
@@ -43,7 +47,7 @@ export function SectionActions({
   const handleBookmark = () => {
     if (isBookmarked) {
       removeBookmark(summaryId, sectionIndex);
-      showToast('Removed from bookmarks');
+      showToast('Removed from saved');
     } else {
       addBookmark({
         summaryId,
@@ -53,8 +57,13 @@ export function SectionActions({
         videoTitle,
         channelName,
       });
-      showToast('Bookmarked');
+      showToast('Saved');
     }
+  };
+
+  const handlePlay = () => {
+    const t = Math.floor(timestampStart);
+    Linking.openURL(`https://youtube.com/watch?v=${videoId}&t=${t}`);
   };
 
   return (
@@ -82,7 +91,7 @@ export function SectionActions({
       <Pressable
         style={styles.button}
         onPress={handleBookmark}
-        accessibilityLabel={isBookmarked ? 'Remove bookmark' : 'Bookmark section'}
+        accessibilityLabel={isBookmarked ? 'Remove from saved' : 'Save section'}
         accessibilityRole="button">
         <Ionicons
           name={isBookmarked ? 'bookmark' : 'bookmark-outline'}
@@ -94,8 +103,16 @@ export function SectionActions({
             styles.buttonText,
             isBookmarked && { color: Colors.primary },
           ]}>
-          {isBookmarked ? 'Saved' : 'Bookmark'}
+          {isBookmarked ? 'Saved' : 'Save'}
         </Text>
+      </Pressable>
+      <Pressable
+        style={styles.button}
+        onPress={handlePlay}
+        accessibilityLabel="Play from this timestamp"
+        accessibilityRole="button">
+        <Ionicons name="play-outline" size={16} color={Colors.textSecondary} />
+        <Text style={styles.buttonText}>Play</Text>
       </Pressable>
     </View>
   );

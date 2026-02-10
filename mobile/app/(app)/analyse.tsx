@@ -18,10 +18,12 @@ import { useGenerateSummary, useSummaries } from '@/src/hooks/useSummary';
 import { useVideoPreview } from '@/src/hooks/useVideoPreview';
 import { useShareIntentUrl } from '@/src/hooks/useShareIntent';
 import { FullScreenLoader } from '@/src/components/summary/FullScreenLoader';
+import { useToast } from '@/src/components/ui/Toast';
 
 export default function AnalyseScreen() {
   const params = useLocalSearchParams<{ url?: string }>();
   const [url, setUrl] = useState(params.url ?? '');
+  const showToast = useToast();
 
   // Pre-fill URL from route params (e.g. from creator page)
   useEffect(() => {
@@ -121,17 +123,29 @@ export default function AnalyseScreen() {
               thumbnailUrl={preview?.thumbnailUrl}
               videoTitle={preview?.title}
               channelName={preview?.channelName}
+              showToast={showToast}
             />
           ) : (
-            <Pressable
-              style={[styles.button, !url.trim() && styles.buttonDisabled]}
-              onPress={handleAnalyse}
-              disabled={!url.trim()}
-              accessibilityLabel="Analyse video"
-              accessibilityRole="button">
-              <Ionicons name="sparkles-outline" size={20} color="#fff" />
-              <Text style={styles.buttonText}>Analyse</Text>
-            </Pressable>
+            <>
+              <Pressable
+                style={[styles.button, !url.trim() && styles.buttonDisabled]}
+                onPress={handleAnalyse}
+                disabled={!url.trim()}
+                accessibilityLabel="Analyse video"
+                accessibilityRole="button">
+                <Ionicons name="sparkles-outline" size={20} color="#fff" />
+                <Text style={styles.buttonText}>Analyse</Text>
+              </Pressable>
+
+              <Pressable
+                style={styles.importButton}
+                onPress={() => showToast('Coming soon \u2014 will import your Watch Later videos')}
+                accessibilityLabel="Import from Google"
+                accessibilityRole="button">
+                <Ionicons name="cloud-download-outline" size={18} color={Colors.text} />
+                <Text style={styles.importButtonText}>Import from Google</Text>
+              </Pressable>
+            </>
           )}
         </View>
 
@@ -211,6 +225,21 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 17,
     fontWeight: '600',
+  },
+  importButton: {
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    borderRadius: 12,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  importButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.text,
   },
   preview: {
     flexDirection: 'row',

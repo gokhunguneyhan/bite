@@ -8,6 +8,9 @@ import {
   ActivityIndicator,
   StyleSheet,
   Alert,
+  Share,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
   LayoutChangeEvent,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
@@ -25,12 +28,15 @@ import {
 } from '@/src/hooks/useSummary';
 import { useSession } from '@/src/providers/SessionProvider';
 import { useSettingsStore, LANGUAGES } from '@/src/stores/settingsStore';
+import { useLikeStore } from '@/src/stores/likeStore';
+import { useBookmarkStore } from '@/src/stores/bookmarkStore';
 import { ChannelInfoBlock } from '@/src/components/summary/ChannelInfoBlock';
 import { CommunityShareCallout } from '@/src/components/summary/CommunityShareCallout';
 import { SectionActions } from '@/src/components/summary/SectionActions';
 import { SectionNavigator } from '@/src/components/summary/SectionNavigator';
 import type { SectionKey } from '@/src/components/summary/SectionNavigator';
 import { VerticalVideoCard } from '@/src/components/summary/VerticalVideoCard';
+import { useToast } from '@/src/components/ui/Toast';
 import type { Summary } from '@/src/types/summary';
 
 function formatTimestamp(seconds: number): string {
@@ -74,11 +80,26 @@ export default function SummaryScreen() {
   const togglePublishMutation = useTogglePublish();
   const [showOriginal, setShowOriginal] = useState(false);
   const [activeSection, setActiveSection] = useState<SectionKey>('summary');
-  // isAnonymous is local state for now — TODO: persist to Supabase
-  const [isAnonymous, setIsAnonymous] = useState(true);
+  // isAnonymous is local state for now -- TODO: persist to Supabase
+  const [isAnonymous, setIsAnonymous] = useState(false);
+
+  const showToast = useToast();
+
+  // Like store
+  const isLiked = useLikeStore((s) => s.isLiked(id));
+  const toggleLike = useLikeStore((s) => s.toggleLike);
+
+  // Bookmark store (sectionIndex -1 = whole summary)
+  const isSaved = useBookmarkStore((s) => s.isBookmarked(id, -1));
+  const addBookmark = useBookmarkStore((s) => s.addBookmark);
+  const removeBookmark = useBookmarkStore((s) => s.removeBookmark);
 
   const scrollRef = useRef<ScrollView>(null);
   const sectionOffsets = useRef<Record<string, number>>({});
+
+  // Scroll direction tracking
+  const [scrollDirection, setScrollDirection] = useState<'up' | 'down'>('up');
+  const lastScrollY = useRef(0);
 
   const channelForSub = summary?.channelName ?? '';
   const { data: subscribed } = useIsSubscribed(channelForSub);
@@ -148,6 +169,44 @@ export default function SummaryScreen() {
     );
   };
 
+  const handleSummaryShare = async () => {
+    if (!summary) return;
+    await Share.share({
+      message: `Check out this analysis of "${summary.videoTitle}" by ${summary.channelName}\n\nhttps://youtube.com/watch?v=${summary.videoId}`,
+    });
+  };
+
+  const handleSave = () => {
+    if (!summary) return;
+    if (isSaved) {
+      removeBookmark(id, -1);
+      showToast('Removed from saved');
+    } else {
+      addBookmark({
+        summaryId: id,
+        sectionIndex: -1,
+        sectionTitle: summary.videoTitle,
+        sectionContent: summary.quickSummary.slice(0, 200),
+        videoTitle: summary.videoTitle,
+        channelName: summary.channelName,
+      });
+      showToast('Saved');
+    }
+  };
+
+  const handleReport = () => {
+    showToast('Report submitted');
+  };
+
+  const handleToggleFollow = () => {
+    if (!summary || isSubMutating) return;
+    if (isFollowing) {
+      unsubscribeMutation.mutate(summary.channelName);
+    } else {
+      subscribeMutation.mutate(summary.channelName);
+    }
+  };
+
   // Similar summaries in same category
   const similarSummaries = useMemo(() => {
     if (!summary || !communitySummaries) return [];
@@ -175,6 +234,19 @@ export default function SummaryScreen() {
       scrollRef.current.scrollTo({ y: offset - 60, animated: true });
     }
   }, []);
+
+  const handleScroll = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const currentY = e.nativeEvent.contentOffset.y;
+      if (currentY > lastScrollY.current + 5) {
+        setScrollDirection('down');
+      } else if (currentY < lastScrollY.current - 5) {
+        setScrollDirection('up');
+      }
+      lastScrollY.current = currentY;
+    },
+    [],
+  );
 
   if (isLoading) {
     return (
@@ -204,7 +276,11 @@ export default function SummaryScreen() {
     displaySummary.affiliateLinks.filter((l) => l.category === 'recommended');
 
   return (
-    <ScrollView style={styles.container} ref={scrollRef}>
+    <ScrollView
+      style={styles.container}
+      ref={scrollRef}
+      onScroll={handleScroll}
+      scrollEventThrottle={16}>
       {/* Thumbnail */}
       <Image
         source={{ uri: summary.thumbnailUrl }}
@@ -212,7 +288,7 @@ export default function SummaryScreen() {
         resizeMode="cover"
       />
 
-      {/* Video meta — preserved */}
+      {/* Video meta */}
       <View style={styles.videoMeta}>
         <Text style={styles.videoTitle}>{summary.videoTitle}</Text>
         <View style={styles.metaRow}>
@@ -241,85 +317,100 @@ export default function SummaryScreen() {
         )}
       </View>
 
+      {/* Action CTAs Row */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.actionCtasContainer}
+        style={styles.actionCtasScroll}>
+        {needsTranslation && !isCheckingCache && !translationAvailable && (
+          <Pressable
+            style={[
+              styles.actionPill,
+              translateMutation.isPending && styles.actionPillDisabled,
+            ]}
+            onPress={handleTranslate}
+            disabled={translateMutation.isPending}>
+            {translateMutation.isPending ? (
+              <ActivityIndicator color={Colors.primary} size={12} />
+            ) : (
+              <Ionicons name="language-outline" size={16} color={Colors.primary} />
+            )}
+            <Text style={styles.actionPillText}>Translate</Text>
+          </Pressable>
+        )}
+        {needsTranslation && !isCheckingCache && translationAvailable && (
+          <Pressable
+            style={styles.actionPill}
+            onPress={() => setShowOriginal(!showOriginal)}>
+            <Ionicons name="swap-horizontal-outline" size={16} color={Colors.primary} />
+            <Text style={styles.actionPillText}>
+              {showOriginal ? langLabel : 'Original'}
+            </Text>
+          </Pressable>
+        )}
+        <Pressable
+          style={styles.actionPill}
+          onPress={() => toggleLike(id)}>
+          <Ionicons
+            name={isLiked ? 'heart' : 'heart-outline'}
+            size={16}
+            color={isLiked ? Colors.error : Colors.textSecondary}
+          />
+          <Text style={[styles.actionPillText, isLiked && { color: Colors.error }]}>
+            Like
+          </Text>
+        </Pressable>
+        <Pressable
+          style={styles.actionPill}
+          onPress={handleSave}>
+          <Ionicons
+            name={isSaved ? 'bookmark' : 'bookmark-outline'}
+            size={16}
+            color={isSaved ? Colors.primary : Colors.textSecondary}
+          />
+          <Text style={[styles.actionPillText, isSaved && { color: Colors.primary }]}>
+            Save
+          </Text>
+        </Pressable>
+        <Pressable
+          style={styles.actionPill}
+          onPress={handleSummaryShare}>
+          <Ionicons name="arrow-redo-outline" size={16} color={Colors.textSecondary} />
+          <Text style={styles.actionPillText}>Share</Text>
+        </Pressable>
+        <Pressable
+          style={styles.actionPill}
+          onPress={handleReport}>
+          <Ionicons name="flag-outline" size={16} color={Colors.textSecondary} />
+          <Text style={styles.actionPillText}>Report</Text>
+        </Pressable>
+      </ScrollView>
+
       {/* Channel Info Block */}
       <View style={styles.blockSection}>
         <ChannelInfoBlock
           channelName={summary.channelName}
           isFollowing={isFollowing}
           isMutating={isSubMutating}
-          onToggleFollow={() => {
-            if (isSubMutating) return;
-            if (isFollowing) {
-              unsubscribeMutation.mutate(summary.channelName);
-            } else {
-              subscribeMutation.mutate(summary.channelName);
-            }
-          }}
+          onToggleFollow={handleToggleFollow}
         />
       </View>
-
-      {/* Translate button */}
-      {needsTranslation && !isCheckingCache && (
-        <View style={styles.blockSection}>
-          {translationAvailable ? (
-            <Pressable
-              style={styles.showOriginalToggle}
-              onPress={() => setShowOriginal(!showOriginal)}>
-              <Ionicons
-                name="swap-horizontal-outline"
-                size={16}
-                color={Colors.primary}
-              />
-              <Text style={styles.showOriginalText}>
-                {showOriginal
-                  ? `Show ${langLabel} translation`
-                  : 'Show original'}
-              </Text>
-            </Pressable>
-          ) : (
-            <Pressable
-              style={[
-                styles.translateButton,
-                translateMutation.isPending && styles.translateButtonLoading,
-              ]}
-              onPress={handleTranslate}
-              disabled={translateMutation.isPending}>
-              {translateMutation.isPending ? (
-                <ActivityIndicator color="#fff" size="small" />
-              ) : (
-                <>
-                  <Ionicons name="language-outline" size={18} color="#fff" />
-                  <Text style={styles.translateButtonText}>
-                    Translate to {langLabel}
-                  </Text>
-                </>
-              )}
-            </Pressable>
-          )}
-        </View>
-      )}
 
       {/* Community Share Callout */}
       <View style={styles.blockSection}>
         {isOwner ? (
           <CommunityShareCallout
             isOwner
-            isPublic={summary.isPublic ?? false}
             isAnonymous={isAnonymous}
             isPending={togglePublishMutation.isPending}
-            onTogglePublic={() =>
-              togglePublishMutation.mutate({
-                id: summary.id,
-                isPublic: !summary.isPublic,
-              })
-            }
             onToggleAnonymous={() => setIsAnonymous(!isAnonymous)}
           />
         ) : (
           <CommunityShareCallout
             isOwner={false}
-            analystName={undefined}
-            analysisCount={undefined}
+            analystName={summary.analystName}
+            analysisCount={summary.analysisCount}
           />
         )}
       </View>
@@ -328,6 +419,7 @@ export default function SummaryScreen() {
       <SectionNavigator
         activeSection={activeSection}
         onPress={scrollToSection}
+        scrollDirection={scrollDirection}
       />
 
       {/* Quick Summary */}
@@ -371,20 +463,29 @@ export default function SummaryScreen() {
               sectionContent={section.content}
               videoTitle={summary.videoTitle}
               channelName={summary.channelName}
+              videoId={summary.videoId}
+              timestampStart={section.timestampStart}
             />
           </View>
         ))}
       </View>
 
       {/* Refresher Cards CTA */}
-      <Pressable
-        style={styles.refresherButton}
-        onPress={() => router.push(`/refresher/${id}`)}>
-        <Ionicons name="albums-outline" size={20} color="#fff" />
-        <Text style={styles.refresherButtonText}>
-          Start Refresher Cards ({displaySummary.refresherCards.length})
+      <View style={styles.refresherContainer}>
+        <View style={styles.stackedCardsGraphic}>
+          <View style={[styles.stackedCard, styles.stackedCard3]} />
+          <View style={[styles.stackedCard, styles.stackedCard2]} />
+          <View style={[styles.stackedCard, styles.stackedCard1]} />
+        </View>
+        <Text style={styles.refresherTitle}>
+          {displaySummary.refresherCards.length} Refresher cards generated
         </Text>
-      </Pressable>
+        <Pressable
+          style={styles.refresherCta}
+          onPress={() => router.push(`/refresher/${id}`)}>
+          <Text style={styles.refresherCtaText}>Review</Text>
+        </Pressable>
+      </View>
 
       {/* Actionable Insights */}
       {displaySummary.actionableInsights.length > 0 && (
@@ -515,6 +616,63 @@ export default function SummaryScreen() {
         </View>
       )}
 
+      {/* Bottom Action Buttons */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.actionCtasContainer}
+        style={styles.bottomActionsScroll}>
+        <Pressable
+          style={styles.actionPill}
+          onPress={() => toggleLike(id)}>
+          <Ionicons
+            name={isLiked ? 'heart' : 'heart-outline'}
+            size={16}
+            color={isLiked ? Colors.error : Colors.textSecondary}
+          />
+          <Text style={[styles.actionPillText, isLiked && { color: Colors.error }]}>
+            Like
+          </Text>
+        </Pressable>
+        <Pressable
+          style={styles.actionPill}
+          onPress={handleSave}>
+          <Ionicons
+            name={isSaved ? 'bookmark' : 'bookmark-outline'}
+            size={16}
+            color={isSaved ? Colors.primary : Colors.textSecondary}
+          />
+          <Text style={[styles.actionPillText, isSaved && { color: Colors.primary }]}>
+            Save
+          </Text>
+        </Pressable>
+        <Pressable
+          style={styles.actionPill}
+          onPress={handleSummaryShare}>
+          <Ionicons name="arrow-redo-outline" size={16} color={Colors.textSecondary} />
+          <Text style={styles.actionPillText}>Share</Text>
+        </Pressable>
+        <Pressable
+          style={styles.actionPill}
+          onPress={handleReport}>
+          <Ionicons name="flag-outline" size={16} color={Colors.textSecondary} />
+          <Text style={styles.actionPillText}>Report</Text>
+        </Pressable>
+        <Pressable
+          style={styles.actionPill}
+          onPress={handleToggleFollow}
+          disabled={isSubMutating}>
+          <Ionicons
+            name={isFollowing ? 'checkmark-circle' : 'add-circle-outline'}
+            size={16}
+            color={isFollowing ? Colors.primary : Colors.textSecondary}
+          />
+          <Text style={[styles.actionPillText, isFollowing && { color: Colors.primary }]}>
+            {isFollowing ? 'Following' : 'Follow Channel'}
+          </Text>
+        </Pressable>
+      </ScrollView>
+
       <View style={{ height: 60 }} />
     </ScrollView>
   );
@@ -597,37 +755,34 @@ const styles = StyleSheet.create({
     color: Colors.primary,
     fontWeight: '500',
   },
+  /* Action CTAs row */
+  actionCtasScroll: {
+    marginTop: 4,
+  },
+  actionCtasContainer: {
+    paddingHorizontal: 20,
+    gap: 8,
+  },
+  actionPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: Colors.surface,
+  },
+  actionPillDisabled: {
+    opacity: 0.6,
+  },
+  actionPillText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: Colors.textSecondary,
+  },
   blockSection: {
     paddingHorizontal: 20,
     paddingTop: 12,
-  },
-  showOriginalToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    alignSelf: 'flex-start',
-  },
-  showOriginalText: {
-    fontSize: 13,
-    color: Colors.primary,
-    fontWeight: '500',
-  },
-  translateButton: {
-    flexDirection: 'row',
-    backgroundColor: Colors.primary,
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-  },
-  translateButtonLoading: {
-    opacity: 0.7,
-  },
-  translateButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
   },
   section: {
     paddingHorizontal: 20,
@@ -691,19 +846,59 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     lineHeight: 24,
   },
-  refresherButton: {
-    flexDirection: 'row',
+  /* Refresher Cards CTA */
+  refresherContainer: {
+    backgroundColor: Colors.surface,
+    borderRadius: 16,
+    padding: 24,
     margin: 20,
-    backgroundColor: Colors.primary,
-    borderRadius: 14,
-    padding: 18,
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
   },
-  refresherButtonText: {
+  stackedCardsGraphic: {
+    width: 80,
+    height: 50,
+    marginBottom: 16,
+  },
+  stackedCard: {
+    position: 'absolute',
+    width: 60,
+    height: 40,
+    borderRadius: 8,
+    backgroundColor: Colors.primary + '15',
+  },
+  stackedCard1: {
+    left: 10,
+    top: 10,
+    backgroundColor: Colors.primary + '30',
+    zIndex: 3,
+  },
+  stackedCard2: {
+    left: 5,
+    top: 5,
+    backgroundColor: Colors.primary + '20',
+    zIndex: 2,
+  },
+  stackedCard3: {
+    left: 0,
+    top: 0,
+    backgroundColor: Colors.primary + '15',
+    zIndex: 1,
+  },
+  refresherTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.text,
+    marginBottom: 16,
+  },
+  refresherCta: {
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 32,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  refresherCtaText: {
     color: '#fff',
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '600',
   },
   insightRow: {
@@ -780,5 +975,9 @@ const styles = StyleSheet.create({
   },
   similarCard: {
     width: 200,
+  },
+  bottomActionsScroll: {
+    marginTop: 20,
+    marginBottom: 4,
   },
 });
