@@ -76,8 +76,8 @@ export default function AppLayout() {
           options={{ title: '', presentation: 'modal', headerShown: false }}
         />
         <Stack.Screen
-          name="mock-summary"
-          options={{ title: 'Summary Preview', headerBackTitle: 'Back' }}
+          name="confirm-analyse"
+          options={{ title: 'Analyse Video', headerBackTitle: 'Back' }}
         />
         <Stack.Screen
           name="personalise"

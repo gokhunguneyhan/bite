@@ -8,13 +8,16 @@ import {
   StyleSheet,
 } from 'react-native';
 import { useState } from 'react';
+import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSession } from '@/src/providers/SessionProvider';
 import { Colors } from '@/src/constants/colors';
 import { useSettingsStore, LANGUAGES } from '@/src/stores/settingsStore';
 import { useToast } from '@/src/components/ui/Toast';
 
 export default function MoreScreen() {
+  const insets = useSafeAreaInsets();
   const { signOut } = useSession();
   const { language, setLanguage } = useSettingsStore();
   const showToast = useToast();
@@ -48,7 +51,20 @@ export default function MoreScreen() {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView style={[styles.container, { paddingTop: insets.top }]} contentContainerStyle={styles.content}>
+      {/* Top bar */}
+      <View style={styles.topBar}>
+        <Pressable
+          style={styles.addButton}
+          onPress={() => router.push('/analyse')}
+          accessibilityLabel="Analyse a new video"
+          accessibilityRole="button">
+          <Ionicons name="add" size={24} color="#fff" />
+        </Pressable>
+        <Text style={styles.topBarTitle}>More</Text>
+        <View style={styles.topBarSpacer} />
+      </View>
+
       <Text style={styles.sectionTitle}>Preferences</Text>
       <View style={styles.card}>
         <Pressable
@@ -57,7 +73,7 @@ export default function MoreScreen() {
           accessibilityLabel="Change summary language"
           accessibilityRole="button">
           <Ionicons name="language-outline" size={20} color={Colors.text} />
-          <Text style={styles.rowLabel}>Primary summary language</Text>
+          <Text style={styles.rowLabel}>Summary language</Text>
           <Text style={styles.rowValue}>{currentLang?.label}</Text>
           <Ionicons
             name={showLangPicker ? 'chevron-up' : 'chevron-down'}
@@ -196,6 +212,28 @@ const styles = StyleSheet.create({
   content: {
     padding: 24,
     paddingBottom: 60,
+  },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  addButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  topBarTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  topBarSpacer: {
+    width: 40,
   },
   sectionTitle: {
     fontSize: 14,

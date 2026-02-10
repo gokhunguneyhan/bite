@@ -10,6 +10,7 @@ import {
 import { useMemo } from 'react';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '@/src/constants/colors';
 import {
   useSummaries,
@@ -22,7 +23,8 @@ import { useDueCards } from '@/src/hooks/useSpacedRepetition';
 import { VerticalVideoCard } from '@/src/components/summary/VerticalVideoCard';
 import { useToast } from '@/src/components/ui/Toast';
 import { getChannelLatestVideos } from '@/src/services/youtubeImportService';
-import type { YouTubeVideo } from '@/src/mocks/youtubeSubscriptions';
+import { FEATURED_CREATORS } from '@/src/constants/featuredCreators';
+import { MOCK_CHANNEL_VIDEOS, type YouTubeVideo } from '@/src/mocks/youtubeSubscriptions';
 import type { Summary } from '@/src/types/summary';
 
 type FeedEntry =
@@ -32,6 +34,7 @@ type FeedEntry =
   | { type: 'suggestion'; data: YouTubeVideo };
 
 export default function HomeScreen() {
+  const insets = useSafeAreaInsets();
   const { data: summaries, isLoading } = useSummaries();
   const { data: communitySummaries, isLoading: isCommunityLoading } =
     useCommunitySummaries();
@@ -65,69 +68,94 @@ export default function HomeScreen() {
     return communitySummaries;
   }, [communitySummaries, preferences?.preferredCategories]);
 
-  // Build a single mixed feed
+  // Gather video suggestions from subscriptions + interests/categories
+  const suggestions = useMemo(() => {
+    const seen = new Set<string>();
+    const result: YouTubeVideo[] = [];
+
+    // From subscribed channels
+    if (subscriptions) {
+      for (const sub of subscriptions) {
+        for (const v of getChannelLatestVideos(sub.channelName)) {
+          if (!seen.has(v.videoId)) { seen.add(v.videoId); result.push(v); }
+        }
+      }
+    }
+
+    // From user interests/categories — match against featured creators
+    const interests = preferences?.interests ?? preferences?.preferredCategories ?? [];
+    if (interests.length > 0) {
+      const interestSet = new Set(interests.map((i) => i.toLowerCase()));
+      for (const creator of FEATURED_CREATORS) {
+        if (interestSet.has(creator.category.toLowerCase()) || interests.some((i) => creator.category.toLowerCase().includes(i.toLowerCase()))) {
+          const videos = MOCK_CHANNEL_VIDEOS[creator.name] ?? [];
+          for (const v of videos) {
+            if (!seen.has(v.videoId)) { seen.add(v.videoId); result.push(v); }
+          }
+        }
+      }
+    }
+
+    // If still empty, pull from all featured creators
+    if (result.length === 0) {
+      for (const creator of FEATURED_CREATORS.slice(0, 6)) {
+        for (const v of (MOCK_CHANNEL_VIDEOS[creator.name] ?? [])) {
+          if (!seen.has(v.videoId)) { seen.add(v.videoId); result.push(v); }
+        }
+      }
+    }
+
+    result.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+    return result;
+  }, [subscriptions, preferences?.interests, preferences?.preferredCategories]);
+
+  // Build a single mixed feed — interleave community + suggestions + refreshers
   const feedItems = useMemo(() => {
     const items: FeedEntry[] = [];
     const community = communitySummariesFiltered;
     const refreshers = [...summariesWithCards];
     let communityIdx = 0;
     let refresherIdx = 0;
+    let sugIdx = 0;
 
-    // 1. First 2 community summaries
-    while (communityIdx < 2 && communityIdx < community.length) {
-      items.push({ type: 'summary', data: community[communityIdx] });
-      communityIdx++;
-    }
+    // Helper: push next community or suggestion
+    const pushContent = () => {
+      if (communityIdx < community.length) {
+        items.push({ type: 'summary', data: community[communityIdx++] });
+      } else if (sugIdx < suggestions.length) {
+        items.push({ type: 'suggestion', data: suggestions[sugIdx++] });
+      }
+    };
 
-    // 2. Personalise card (if applicable)
+    // First 2 items
+    pushContent();
+    pushContent();
+
+    // Personalise card (if applicable)
     if (!hasPersonalised && !hasSubscriptions) {
       items.push({ type: 'personalise' });
     }
 
-    // 3. One inline refresher card (if any)
+    // One refresher
     if (refresherIdx < refreshers.length) {
-      items.push({ type: 'refresher', data: refreshers[refresherIdx] });
-      refresherIdx++;
+      items.push({ type: 'refresher', data: refreshers[refresherIdx++] });
     }
 
-    // 4. Remaining community summaries interleaved with refreshers (1 every 3)
-    let sinceLastRefresher = 0;
-    while (communityIdx < community.length) {
-      items.push({ type: 'summary', data: community[communityIdx] });
-      communityIdx++;
-      sinceLastRefresher++;
+    // Fill remaining — alternate community/suggestions, refresher every 3
+    let sinceRefresher = 0;
+    const maxItems = 20;
+    while (items.length < maxItems && (communityIdx < community.length || sugIdx < suggestions.length)) {
+      pushContent();
+      sinceRefresher++;
 
-      if (sinceLastRefresher === 3 && refresherIdx < refreshers.length) {
-        items.push({ type: 'refresher', data: refreshers[refresherIdx] });
-        refresherIdx++;
-        sinceLastRefresher = 0;
-      }
-    }
-
-    // 5. If feed is sparse and user has subscriptions, add video suggestions
-    if (items.filter((i) => i.type === 'summary').length < 4 && hasSubscriptions && subscriptions) {
-      const seen = new Set<string>();
-      const suggestions: YouTubeVideo[] = [];
-      for (const sub of subscriptions) {
-        const videos = getChannelLatestVideos(sub.channelName);
-        for (const v of videos) {
-          if (!seen.has(v.videoId)) {
-            seen.add(v.videoId);
-            suggestions.push(v);
-          }
-        }
-      }
-      // Sort by date, take up to 8
-      suggestions.sort((a, b) =>
-        new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime(),
-      );
-      for (const s of suggestions.slice(0, 8)) {
-        items.push({ type: 'suggestion', data: s });
+      if (sinceRefresher === 3 && refresherIdx < refreshers.length) {
+        items.push({ type: 'refresher', data: refreshers[refresherIdx++] });
+        sinceRefresher = 0;
       }
     }
 
     return items;
-  }, [communitySummariesFiltered, summariesWithCards, hasPersonalised, hasSubscriptions, subscriptions]);
+  }, [communitySummariesFiltered, summariesWithCards, suggestions, hasPersonalised, hasSubscriptions]);
 
   const handleImportYouTube = () => {
     importMutation.mutate(undefined, {
@@ -150,7 +178,7 @@ export default function HomeScreen() {
 
   return (
     <ScrollView
-      style={styles.container}
+      style={[styles.container, { paddingTop: insets.top }]}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}>
       {/* Top bar */}
@@ -244,16 +272,44 @@ export default function HomeScreen() {
 
           if (item.type === 'suggestion') {
             const video = item.data;
-            const isFirst = index === 0 || feedItems[index - 1]?.type !== 'suggestion';
-            return (
-              <View key={`sug-${video.videoId}`}>
-                {isFirst && (
-                  <Text style={styles.suggestionHeader}>Suggested for you</Text>
-                )}
+            // Alternate: every other suggestion uses a large card layout
+            const sugCount = feedItems.slice(0, index).filter((i) => i.type === 'suggestion').length;
+            const isLarge = sugCount % 3 === 0;
+            return isLarge ? (
+              <Pressable
+                key={`sug-${video.videoId}`}
+                style={styles.suggestionLargeCard}
+                onPress={() => router.push({ pathname: '/confirm-analyse', params: { videoId: video.videoId, title: video.title, channelName: video.channelName, thumbnailUrl: video.thumbnailUrl, durationLabel: video.durationLabel ?? '' } })}
+                accessibilityLabel={`Analyse ${video.title}`}
+                accessibilityRole="button">
+                <Image
+                  source={{ uri: video.thumbnailUrl }}
+                  style={styles.suggestionLargeThumb}
+                  resizeMode="cover"
+                />
+                <View style={styles.suggestionLargeInfo}>
+                  <View style={styles.suggestionLargeInfoRow}>
+                    <View style={styles.suggestionLargeTextWrap}>
+                      <Text style={styles.suggestionTitle} numberOfLines={2}>
+                        {video.title}
+                      </Text>
+                      <Text style={styles.suggestionChannel} numberOfLines={1}>
+                        {video.channelName}
+                        {video.durationLabel ? ` · ${video.durationLabel}` : ''}
+                      </Text>
+                    </View>
+                    <View style={styles.summariseTag}>
+                      <Ionicons name="sparkles" size={12} color="#fff" />
+                      <Text style={styles.summariseTagText}>Summarise</Text>
+                    </View>
+                  </View>
+                </View>
+              </Pressable>
+            ) : (
               <Pressable
                 key={`sug-${video.videoId}`}
                 style={styles.suggestionCard}
-                onPress={() => router.push({ pathname: '/analyse', params: { url: `https://youtube.com/watch?v=${video.videoId}` } })}
+                onPress={() => router.push({ pathname: '/confirm-analyse', params: { videoId: video.videoId, title: video.title, channelName: video.channelName, thumbnailUrl: video.thumbnailUrl, durationLabel: video.durationLabel ?? '' } })}
                 accessibilityLabel={`Analyse ${video.title}`}
                 accessibilityRole="button">
                 <Image
@@ -270,12 +326,11 @@ export default function HomeScreen() {
                     {video.durationLabel ? ` · ${video.durationLabel}` : ''}
                   </Text>
                 </View>
-                <View style={styles.analyseTag}>
+                <View style={styles.summariseTag}>
                   <Ionicons name="sparkles" size={12} color="#fff" />
-                  <Text style={styles.analyseTagText}>Analyse</Text>
+                  <Text style={styles.summariseTagText}>Summarise</Text>
                 </View>
               </Pressable>
-              </View>
             );
           }
 
@@ -504,14 +559,32 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.primary,
   },
-  // Suggestion cards
-  suggestionHeader: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: Colors.text,
-    marginTop: 8,
-    marginBottom: 12,
+  // Suggestion cards — large variant
+  suggestionLargeCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 16,
   },
+  suggestionLargeThumb: {
+    width: '100%',
+    aspectRatio: 16 / 9,
+    backgroundColor: Colors.border,
+  },
+  suggestionLargeInfo: {
+    padding: 14,
+    gap: 4,
+  },
+  suggestionLargeInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  suggestionLargeTextWrap: {
+    flex: 1,
+    gap: 4,
+  },
+  // Suggestion cards — compact variant
   suggestionCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -541,7 +614,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.textSecondary,
   },
-  analyseTag: {
+  summariseTag: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
@@ -550,7 +623,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
-  analyseTagText: {
+  summariseTagText: {
     fontSize: 12,
     fontWeight: '600',
     color: '#fff',

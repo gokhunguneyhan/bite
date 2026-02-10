@@ -11,6 +11,7 @@ import {
 import { useState, useMemo, useCallback } from 'react';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSession } from '@/src/providers/SessionProvider';
 import { Colors } from '@/src/constants/colors';
 import { useSummaries, useSubscriptions, useImportYouTubeSubscriptions } from '@/src/hooks/useSummary';
@@ -26,6 +27,7 @@ type ProfileTab = 'summaries' | 'saved';
 type SavedFilter = 'all' | 'videos' | 'sections' | 'refreshers';
 
 export default function ProfileScreen() {
+  const insets = useSafeAreaInsets();
   const { user, profile } = useSession();
   const { data: summaries } = useSummaries();
   const { data: subscriptions } = useSubscriptions();
@@ -352,7 +354,20 @@ export default function ProfileScreen() {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView style={[styles.container, { paddingTop: insets.top }]} contentContainerStyle={styles.content}>
+      {/* Top bar */}
+      <View style={styles.topBar}>
+        <Pressable
+          style={styles.addButton}
+          onPress={() => router.push('/analyse')}
+          accessibilityLabel="Analyse a new video"
+          accessibilityRole="button">
+          <Ionicons name="add" size={24} color="#fff" />
+        </Pressable>
+        <Text style={styles.topBarTitle}>Profile</Text>
+        <View style={styles.topBarSpacer} />
+      </View>
+
       {/* Profile Header */}
       <View style={styles.header}>
         <View style={styles.avatar}>
@@ -476,6 +491,28 @@ const styles = StyleSheet.create({
   content: {
     padding: 20,
     paddingBottom: 60,
+  },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  addButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  topBarTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  topBarSpacer: {
+    width: 40,
   },
   header: {
     alignItems: 'center',

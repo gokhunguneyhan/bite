@@ -14,6 +14,7 @@ import { useBookmarkStore } from '@/src/stores/bookmarkStore';
 import { useLikeStore } from '@/src/stores/likeStore';
 import { useUserFollowStore } from '@/src/stores/userFollowStore';
 import { useYouTubeStore } from '@/src/stores/youtubeStore';
+import { useSettingsStore } from '@/src/stores/settingsStore';
 
 interface Profile {
   id: string;
@@ -64,6 +65,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
     supabase.auth.getSession().then(({ data: { session: s } }) => {
       setSession(s);
       if (s?.user) {
+        clearStoresIfUserChanged(s.user.id);
         loadProfile(s.user.id);
       }
       setIsLoading(false);
@@ -73,6 +75,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
       (_event, s) => {
         setSession(s);
         if (s?.user) {
+          clearStoresIfUserChanged(s.user.id);
           loadProfile(s.user.id);
         } else {
           setProfile(null);
@@ -82,6 +85,20 @@ export function SessionProvider({ children }: PropsWithChildren) {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  /** Clear all per-user stores when a different user signs in */
+  function clearStoresIfUserChanged(userId: string) {
+    const settings = useSettingsStore.getState();
+    if (settings.lastUserId !== userId) {
+      // Different user (or first run with stale data) — wipe all local stores
+      useBookmarkStore.getState().clear();
+      useLikeStore.getState().clear();
+      useUserFollowStore.getState().clear();
+      useYouTubeStore.getState().clear();
+      if (settings.lastUserId) settings.clear(); // only reset prefs on actual user switch
+      useSettingsStore.getState().setLastUserId(userId);
+    }
+  }
 
   async function loadProfile(userId: string) {
     const { data } = await supabase
@@ -135,6 +152,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
     useLikeStore.getState().clear();
     useUserFollowStore.getState().clear();
     useYouTubeStore.getState().clear();
+    useSettingsStore.getState().clear();
     supabase.auth.signOut();
   }
 

@@ -4,6 +4,7 @@ import {
   TextInput,
   Pressable,
   ScrollView,
+  Image,
   StyleSheet,
   ActivityIndicator,
 } from 'react-native';
@@ -19,7 +20,9 @@ import {
   useUnsubscribe,
 } from '@/src/hooks/useSummary';
 import { usePreferences } from '@/src/hooks/usePreferences';
+import { useCategoryVideos, getCategoryCreators } from '@/src/hooks/useCategoryVideos';
 import { FEATURED_CREATORS } from '@/src/constants/featuredCreators';
+import { CATEGORIES } from '@/src/types/summary';
 import { VerticalVideoCard } from '@/src/components/summary/VerticalVideoCard';
 import type { Summary } from '@/src/types/summary';
 
@@ -36,19 +39,28 @@ export default function ExploreScreen() {
   const { data: subscriptions } = useSubscriptions();
   const subscribeMutation = useSubscribe();
   const unsubscribeMutation = useUnsubscribe();
+  const { data: categoryVideos, isLoading: isLoadingVideos } = useCategoryVideos(selectedChip);
 
   const followedChannels = useMemo(
     () => new Set(subscriptions?.map((s) => s.channelName.toLowerCase()) ?? []),
     [subscriptions],
   );
 
-  // Build chip list: All + user interests + Trending
+  // Channels matching the selected category
+  const categoryCreators = useMemo(
+    () => getCategoryCreators(selectedChip),
+    [selectedChip],
+  );
+
+  // Build chip list: All + user interests (or top categories) + Trending
   const chips = useMemo(() => {
     const list: ChipFilter[] = ['All'];
     if (preferences?.interests?.length) {
       list.push(...preferences.interests);
     } else if (preferences?.preferredCategories?.length) {
       list.push(...preferences.preferredCategories);
+    } else {
+      list.push(...CATEGORIES.filter((c) => c !== 'Other').slice(0, 5));
     }
     list.push('Trending');
     return list;
@@ -59,20 +71,16 @@ export default function ExploreScreen() {
     if (!communitySummaries) return [];
     if (selectedChip === 'All') return communitySummaries;
     if (selectedChip === 'Trending') {
-      // Most recent as "trending"
       return [...communitySummaries].sort(
         (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
       );
     }
-    // Filter by interest/category
     const q = selectedChip.toLowerCase();
-    const filtered = communitySummaries.filter(
+    return communitySummaries.filter(
       (s) =>
         (s.category && s.category.toLowerCase().includes(q)) ||
-        s.videoTitle.toLowerCase().includes(q) ||
         s.channelName.toLowerCase().includes(q),
     );
-    return filtered.length > 0 ? filtered : communitySummaries;
   }, [communitySummaries, selectedChip]);
 
   // Search results
@@ -92,17 +100,9 @@ export default function ExploreScreen() {
       c.name.toLowerCase().includes(q),
     );
     matchingCreators.forEach((c) => channelSet.add(c.name));
-    const categories = [
-      'Tech',
-      'Business',
-      'Science',
-      'Self-improvement',
-      'Health',
-      'Finance',
-      'Education',
-      'Entertainment',
-      'Productivity',
-    ].filter((c) => c.toLowerCase().includes(q));
+    const categories = CATEGORIES
+      .filter((c) => c !== 'Other')
+      .filter((c) => c.toLowerCase().includes(q));
     return { summaries, channels: [...channelSet].slice(0, 10), categories };
   }, [search, communitySummaries, isSearching]);
 
@@ -126,12 +126,10 @@ export default function ExploreScreen() {
     }
   };
 
-  // Split summaries for the feed: first batch, channel grid, second batch
-  const firstBatch = filteredSummaries.slice(0, 4);
-  const secondBatch = filteredSummaries.slice(4);
-
-  // Top channels grid (2x2)
-  const topChannels = FEATURED_CREATORS.slice(0, 4);
+  // Whether we have real content for the selected category (not just empty)
+  const hasSummaries = filteredSummaries.length > 0;
+  const hasVideos = (categoryVideos?.length ?? 0) > 0;
+  const hasCreators = categoryCreators.length > 0;
 
   if (isLoading) {
     return (
@@ -166,7 +164,7 @@ export default function ExploreScreen() {
         </Pressable>
       </View>
 
-      {/* Search Input (slides in when active) */}
+      {/* Search Input */}
       {searchActive && (
         <View style={styles.searchContainer}>
           <Ionicons name="search-outline" size={18} color={Colors.tabIconDefault} />
@@ -218,7 +216,6 @@ export default function ExploreScreen() {
         {/* Search results mode */}
         {isSearching ? (
           <View style={styles.searchResults}>
-            {/* Matching channels */}
             {searchResults.channels.length > 0 && (
               <>
                 <Text style={styles.sectionTitle}>Channels</Text>
@@ -251,7 +248,6 @@ export default function ExploreScreen() {
               </>
             )}
 
-            {/* Matching categories */}
             {searchResults.categories.length > 0 && (
               <>
                 <Text style={styles.sectionTitle}>Categories</Text>
@@ -278,7 +274,6 @@ export default function ExploreScreen() {
               </>
             )}
 
-            {/* Matching summaries */}
             <Text style={styles.sectionTitle}>
               {searchResults.summaries.length > 0
                 ? `${searchResults.summaries.length} result${searchResults.summaries.length !== 1 ? 's' : ''}`
@@ -299,24 +294,28 @@ export default function ExploreScreen() {
           </View>
         ) : (
           <>
-            {/* First batch of community summaries */}
-            {firstBatch.length > 0 ? (
-              firstBatch.map((s) => <VerticalVideoCard key={s.id} summary={s} />)
-            ) : (
-              <View style={styles.placeholder}>
-                <Ionicons name="earth-outline" size={32} color={Colors.tabIconDefault} />
-                <Text style={styles.placeholderText}>
-                  No community summaries yet. Be the first to share!
-                </Text>
-              </View>
+            {/* Community summaries */}
+            {hasSummaries && (
+              <>
+                {selectedChip !== 'All' && (
+                  <Text style={styles.sectionTitle}>Community Summaries</Text>
+                )}
+                {filteredSummaries.slice(0, 6).map((s) => (
+                  <VerticalVideoCard key={s.id} summary={s} />
+                ))}
+              </>
             )}
 
-            {/* Top Channels to Follow - 2x2 grid */}
-            {firstBatch.length > 0 && (
+            {/* Channels for this category */}
+            {hasCreators && (
               <View style={styles.channelGridSection}>
-                <Text style={styles.sectionTitle}>Top Channels to Follow</Text>
+                <Text style={styles.sectionTitle}>
+                  {selectedChip !== 'All' && selectedChip !== 'Trending'
+                    ? `${selectedChip} Channels`
+                    : 'Top Channels to Follow'}
+                </Text>
                 <View style={styles.channelGrid}>
-                  {topChannels.map((creator) => {
+                  {categoryCreators.slice(0, 4).map((creator) => {
                     const isFollowed = followedChannels.has(
                       creator.name.toLowerCase(),
                     );
@@ -371,10 +370,73 @@ export default function ExploreScreen() {
               </View>
             )}
 
-            {/* Second batch of community summaries */}
-            {secondBatch.map((s) => (
-              <VerticalVideoCard key={s.id} summary={s} />
-            ))}
+            {/* Latest videos from YouTube (real RSS data) */}
+            {isLoadingVideos && (
+              <ActivityIndicator color={Colors.primary} style={styles.videoLoader} />
+            )}
+            {hasVideos && (
+              <>
+                <Text style={styles.sectionTitle}>Latest Videos</Text>
+                {categoryVideos!.map((video) => (
+                  <Pressable
+                    key={video.videoId}
+                    style={styles.videoCard}
+                    onPress={() =>
+                      router.push({
+                        pathname: '/confirm-analyse',
+                        params: {
+                          videoId: video.videoId,
+                          title: video.title,
+                          channelName: video.channelName,
+                          thumbnailUrl: video.thumbnailUrl,
+                          durationLabel: video.durationLabel ?? '',
+                        },
+                      })
+                    }
+                    accessibilityLabel={`Summarise ${video.title}`}
+                    accessibilityRole="button">
+                    <Image
+                      source={{ uri: video.thumbnailUrl }}
+                      style={styles.videoThumb}
+                      resizeMode="cover"
+                    />
+                    <View style={styles.videoInfo}>
+                      <Text style={styles.videoTitle} numberOfLines={2}>
+                        {video.title}
+                      </Text>
+                      <Text style={styles.videoChannel} numberOfLines={1}>
+                        {video.channelName}
+                      </Text>
+                    </View>
+                    <View style={styles.summariseTag}>
+                      <Ionicons name="sparkles" size={12} color="#fff" />
+                      <Text style={styles.summariseTagText}>Summarise</Text>
+                    </View>
+                  </Pressable>
+                ))}
+              </>
+            )}
+
+            {/* More community summaries after channels & videos */}
+            {hasSummaries && filteredSummaries.length > 6 && (
+              <>
+                {filteredSummaries.slice(6).map((s) => (
+                  <VerticalVideoCard key={s.id} summary={s} />
+                ))}
+              </>
+            )}
+
+            {/* Empty state — only when no content at all */}
+            {!hasSummaries && !hasVideos && !hasCreators && !isLoadingVideos && (
+              <View style={styles.placeholder}>
+                <Ionicons name="earth-outline" size={32} color={Colors.tabIconDefault} />
+                <Text style={styles.placeholderText}>
+                  {selectedChip !== 'All'
+                    ? `No content in "${selectedChip}" yet.`
+                    : 'No community summaries yet. Be the first to share!'}
+                </Text>
+              </View>
+            )}
           </>
         )}
 
@@ -395,7 +457,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: Colors.background,
   },
-  // Custom header
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -423,7 +484,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  // Search bar
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -440,7 +500,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: Colors.text,
   },
-  // Chip filters
   chipScroll: {
     maxHeight: 52,
     marginBottom: 4,
@@ -471,7 +530,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '600',
   },
-  // Feed
   feed: {
     flex: 1,
   },
@@ -487,7 +545,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     marginTop: 8,
   },
-  // Channel grid (2x2)
+  // Channel grid
   channelGridSection: {
     marginBottom: 16,
     marginTop: 8,
@@ -557,6 +615,53 @@ const styles = StyleSheet.create({
   },
   followButtonTextActive: {
     color: Colors.primary,
+  },
+  // Video cards (YouTube RSS)
+  videoCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    padding: 12,
+    gap: 12,
+    marginBottom: 12,
+  },
+  videoThumb: {
+    width: 100,
+    height: 56,
+    borderRadius: 8,
+    backgroundColor: Colors.border,
+  },
+  videoInfo: {
+    flex: 1,
+    gap: 4,
+  },
+  videoTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.text,
+    lineHeight: 18,
+  },
+  videoChannel: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+  },
+  summariseTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: Colors.primary,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  summariseTagText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  videoLoader: {
+    marginVertical: 16,
   },
   // Placeholder
   placeholder: {

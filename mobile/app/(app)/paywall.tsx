@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/src/constants/colors';
 import { useToast } from '@/src/components/ui/Toast';
+import { useSettingsStore } from '@/src/stores/settingsStore';
 
 const BENEFITS = [
   {
@@ -24,9 +25,11 @@ const BENEFITS = [
 
 export default function PaywallScreen() {
   const showToast = useToast();
+  const startTrial = useSettingsStore((s) => s.startTrial);
 
   const handleStartTrial = () => {
     // TODO: Integrate with App Store subscriptions (StoreKit)
+    startTrial();
     showToast('Free trial started!');
     router.back();
   };
@@ -78,15 +81,6 @@ export default function PaywallScreen() {
           accessibilityLabel="Start 7-day free trial"
           accessibilityRole="button">
           <Text style={styles.trialButtonText}>Start 7-day free trial</Text>
-        </Pressable>
-
-        <Pressable
-          onPress={() => router.push('/mock-summary')}
-          accessibilityLabel="Preview a summary"
-          accessibilityRole="button">
-          <Text style={styles.previewLink}>
-            First, show me how summaries look like
-          </Text>
         </Pressable>
 
         <Text style={styles.terms}>
@@ -201,11 +195,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 18,
     fontWeight: '600',
-  },
-  previewLink: {
-    fontSize: 15,
-    color: Colors.primary,
-    fontWeight: '500',
   },
   terms: {
     fontSize: 13,

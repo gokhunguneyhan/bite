@@ -19,6 +19,7 @@ import { useVideoPreview } from '@/src/hooks/useVideoPreview';
 import { useShareIntentUrl } from '@/src/hooks/useShareIntent';
 import { FullScreenLoader } from '@/src/components/summary/FullScreenLoader';
 import { useToast } from '@/src/components/ui/Toast';
+import { useSettingsStore } from '@/src/stores/settingsStore';
 
 export default function AnalyseScreen() {
   const params = useLocalSearchParams<{ url?: string }>();
@@ -41,7 +42,8 @@ export default function AnalyseScreen() {
   }, []);
   useShareIntentUrl(handleSharedUrl);
 
-  // Gate first-time users through paywall
+  // Gate first-time users through paywall (skip if trial already started)
+  const trialStarted = useSettingsStore((s) => s.trialStarted);
   const isNewUser = !summaries || summaries.length === 0;
 
   const handleAnalyse = () => {
@@ -52,7 +54,7 @@ export default function AnalyseScreen() {
     }
 
     // TODO: Check actual subscription status instead of summary count
-    if (isNewUser) {
+    if (isNewUser && !trialStarted) {
       router.push('/paywall');
       return;
     }

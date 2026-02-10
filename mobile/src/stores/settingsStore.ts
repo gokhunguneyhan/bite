@@ -24,6 +24,11 @@ export type LanguageCode = (typeof LANGUAGES)[number]['code'];
 interface SettingsState {
   language: LanguageCode;
   setLanguage: (lang: LanguageCode) => void;
+  trialStarted: boolean;
+  startTrial: () => void;
+  lastUserId: string | null;
+  setLastUserId: (id: string) => void;
+  clear: () => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -31,6 +36,11 @@ export const useSettingsStore = create<SettingsState>()(
     (set) => ({
       language: 'en',
       setLanguage: (language) => set({ language }),
+      trialStarted: false,
+      startTrial: () => set({ trialStarted: true }),
+      lastUserId: null,
+      setLastUserId: (id) => set({ lastUserId: id }),
+      clear: () => set({ language: 'en', trialStarted: false, lastUserId: null }),
     }),
     {
       name: '@yt_summarise_settings',
