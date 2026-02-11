@@ -3,12 +3,12 @@ import {
   Text,
   TextInput,
   Pressable,
-  Image,
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
   Alert,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -42,9 +42,8 @@ export default function AnalyseScreen() {
   }, []);
   useShareIntentUrl(handleSharedUrl);
 
-  // Gate first-time users through paywall (skip if trial already started)
-  const trialStarted = useSettingsStore((s) => s.trialStarted);
-  const isNewUser = !summaries || summaries.length === 0;
+  // Gate free-tier users through paywall (skip if trial already started)
+  const { selectedTier, trialStarted } = useSettingsStore();
 
   const handleAnalyse = () => {
     const id = extractVideoId(url.trim());
@@ -53,8 +52,7 @@ export default function AnalyseScreen() {
       return;
     }
 
-    // TODO: Check actual subscription status instead of summary count
-    if (isNewUser && !trialStarted) {
+    if (selectedTier === 'free' && !trialStarted) {
       router.push('/paywall');
       return;
     }
@@ -71,6 +69,17 @@ export default function AnalyseScreen() {
   };
 
   const isGenerating = generateMutation.isPending;
+
+  if (isGenerating) {
+    return (
+      <FullScreenLoader
+        thumbnailUrl={preview?.thumbnailUrl}
+        videoTitle={preview?.title}
+        channelName={preview?.channelName}
+        showToast={showToast}
+      />
+    );
+  }
 
   return (
     <KeyboardAvoidingView
@@ -98,16 +107,15 @@ export default function AnalyseScreen() {
             placeholderTextColor={Colors.tabIconDefault}
             returnKeyType="go"
             onSubmitEditing={handleAnalyse}
-            editable={!isGenerating}
             accessibilityLabel="YouTube URL input"
           />
 
-          {preview && !isGenerating && (
+          {preview && (
             <View style={styles.preview}>
               <Image
                 source={{ uri: preview.thumbnailUrl }}
                 style={styles.previewThumb}
-                resizeMode="cover"
+                contentFit="cover"
               />
               <View style={styles.previewInfo}>
                 <Text style={styles.previewTitle} numberOfLines={2}>
@@ -120,45 +128,32 @@ export default function AnalyseScreen() {
             </View>
           )}
 
-          {isGenerating ? (
-            <FullScreenLoader
-              thumbnailUrl={preview?.thumbnailUrl}
-              videoTitle={preview?.title}
-              channelName={preview?.channelName}
-              showToast={showToast}
-            />
-          ) : (
-            <>
-              <Pressable
-                style={[styles.button, !url.trim() && styles.buttonDisabled]}
-                onPress={handleAnalyse}
-                disabled={!url.trim()}
-                accessibilityLabel="Analyse video"
-                accessibilityRole="button">
-                <Ionicons name="sparkles-outline" size={20} color="#fff" />
-                <Text style={styles.buttonText}>Analyse</Text>
-              </Pressable>
+          <Pressable
+            style={[styles.button, !url.trim() && styles.buttonDisabled]}
+            onPress={handleAnalyse}
+            disabled={!url.trim()}
+            accessibilityLabel="Analyse video"
+            accessibilityRole="button">
+            <Ionicons name="sparkles-outline" size={20} color="#fff" />
+            <Text style={styles.buttonText}>Analyse</Text>
+          </Pressable>
 
-              <Pressable
-                style={styles.importButton}
-                onPress={() => showToast('Coming soon \u2014 will import your Watch Later videos')}
-                accessibilityLabel="Import from Google"
-                accessibilityRole="button">
-                <Ionicons name="cloud-download-outline" size={18} color={Colors.text} />
-                <Text style={styles.importButtonText}>Import from Google</Text>
-              </Pressable>
-            </>
-          )}
+          <Pressable
+            style={styles.importButton}
+            onPress={() => showToast('Coming soon \u2014 will import your Watch Later videos')}
+            accessibilityLabel="Import from Google"
+            accessibilityRole="button">
+            <Ionicons name="cloud-download-outline" size={18} color={Colors.text} />
+            <Text style={styles.importButtonText}>Import from Google</Text>
+          </Pressable>
         </View>
 
-        {!isGenerating && (
-          <Pressable
-            onPress={() => router.back()}
-            accessibilityLabel="Go back"
-            accessibilityRole="button">
-            <Text style={styles.skipText}>Go back to feed</Text>
-          </Pressable>
-        )}
+        <Pressable
+          onPress={() => router.back()}
+          accessibilityLabel="Go back"
+          accessibilityRole="button">
+          <Text style={styles.skipText}>Go back to feed</Text>
+        </Pressable>
       </View>
     </KeyboardAvoidingView>
   );

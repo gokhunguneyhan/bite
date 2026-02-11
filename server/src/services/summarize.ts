@@ -47,17 +47,11 @@ export interface SummaryResult {
   category: string;
 }
 
-export async function generateSummary(
-  transcript: string,
-  videoTitle: string,
-  timeoutMs?: number,
-): Promise<SummaryResult> {
-  const prompt = `You are a Deep-Knowledge YouTube Summarizer that produces summaries enabling true knowledge transfer - not just listing topics, but explaining ideas with reasoning, stories, and context that make them memorable.
-
-Video title: "${videoTitle}"
-
-Transcript:
-${transcript}
+/**
+ * Static system prompt for the summarizer. Extracted as a module-level constant
+ * so Anthropic prompt caching can reuse it across requests (~80% cost reduction).
+ */
+const SYSTEM_PROMPT = `You are a Deep-Knowledge YouTube Summarizer that produces summaries enabling true knowledge transfer - not just listing topics, but explaining ideas with reasoning, stories, and context that make them memorable.
 
 ---
 
@@ -164,6 +158,11 @@ Return a JSON object with this exact structure (raw JSON only, no markdown):
 
 Write in the same language as the transcript.`;
 
+export async function generateSummary(
+  transcript: string,
+  videoTitle: string,
+  timeoutMs?: number,
+): Promise<SummaryResult> {
   console.log(`[summarize] Sending ${transcript.length} chars (~${Math.round(transcript.length / 4)} tokens) to Claude`);
 
   const requestTimeout = timeoutMs ?? calculateTimeoutMs(transcript.length);
@@ -176,10 +175,17 @@ Write in the same language as the transcript.`;
     {
       model: 'claude-sonnet-4-5-20250929',
       max_tokens: 16384,
+      system: [
+        {
+          type: 'text',
+          text: SYSTEM_PROMPT,
+          cache_control: { type: 'ephemeral' },
+        },
+      ],
       messages: [
         {
           role: 'user',
-          content: prompt,
+          content: `Video title: "${videoTitle}"\n\nTranscript:\n${transcript}`,
         },
       ],
     },

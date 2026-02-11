@@ -44,6 +44,15 @@ server/dist/
 # Mobile env
 mobile/.env
 
+# Secrets and certificates
+*.pem
+*.key
+*.p12
+*.jks
+*.keystore
+google-services.json
+GoogleService-Info.plist
+
 # Claude Code tooling (per-developer config)
 .claude/
 SOCIAL_MEDIA_MARKETING_PLAN.md

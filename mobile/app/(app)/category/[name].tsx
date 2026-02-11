@@ -4,11 +4,11 @@ import {
   TextInput,
   Pressable,
   ScrollView,
-  Image,
   StyleSheet,
   ActivityIndicator,
   Dimensions,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { useState, useMemo } from 'react';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -153,7 +153,7 @@ export default function CategoryScreen() {
                 <Image
                   source={{ uri: video.thumbnailUrl }}
                   style={styles.videoGridThumb}
-                  resizeMode="cover"
+                  contentFit="cover"
                 />
                 {video.durationLabel ? (
                   <View style={styles.durationBadge}>

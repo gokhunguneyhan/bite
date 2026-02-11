@@ -4,12 +4,12 @@ import {
   TextInput,
   Pressable,
   ScrollView,
-  Image,
   StyleSheet,
   ActivityIndicator,
   Dimensions,
   Modal,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { useState, useMemo, useCallback } from 'react';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -418,7 +418,7 @@ export default function ExploreScreen() {
                       <Image
                         source={{ uri: video.thumbnailUrl }}
                         style={styles.videoGridThumb}
-                        resizeMode="cover"
+                        contentFit="cover"
                       />
                       {video.durationLabel ? (
                         <View style={styles.durationBadge}>

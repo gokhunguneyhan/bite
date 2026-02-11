@@ -17,11 +17,13 @@ import {
   isSubscribed,
 } from '@/src/services/creatorService';
 import { importYouTubeSubscriptions } from '@/src/services/youtubeImportService';
+import { fetchFollowersCount } from '@/src/stores/userFollowStore';
 
 export function useSummaries() {
   return useQuery({
     queryKey: ['summaries'],
     queryFn: fetchSummaries,
+    staleTime: 30_000,
   });
 }
 
@@ -30,6 +32,7 @@ export function useSummary(id: string) {
     queryKey: ['summary', id],
     queryFn: () => fetchSummary(id),
     enabled: !!id,
+    staleTime: 5 * 60_000,
   });
 }
 
@@ -42,6 +45,7 @@ export function useCachedTranslation(
     queryKey: ['cachedTranslation', summaryId, language],
     queryFn: () => fetchCachedTranslation(summaryId!, language),
     enabled: enabled && !!summaryId,
+    staleTime: Infinity,
   });
 }
 
@@ -61,6 +65,7 @@ export function useChannelSummaries(channelName: string) {
     queryKey: ['channelSummaries', channelName],
     queryFn: () => fetchSummariesByChannel(channelName),
     enabled: !!channelName,
+    staleTime: 60_000,
   });
 }
 
@@ -68,6 +73,7 @@ export function useCommunitySummaries() {
   return useQuery({
     queryKey: ['community-summaries'],
     queryFn: fetchCommunitySummaries,
+    staleTime: 60_000,
   });
 }
 
@@ -112,6 +118,7 @@ export function useSubscriptions() {
   return useQuery({
     queryKey: ['subscriptions'],
     queryFn: fetchSubscriptions,
+    staleTime: 60_000,
   });
 }
 
@@ -120,6 +127,7 @@ export function useIsSubscribed(channelName: string) {
     queryKey: ['subscribed', channelName],
     queryFn: () => isSubscribed(channelName),
     enabled: !!channelName,
+    staleTime: 60_000,
   });
 }
 
@@ -158,5 +166,13 @@ export function useImportYouTubeSubscriptions() {
         queryClient.setQueryData(['subscribed', sub.channelName], true);
       }
     },
+  });
+}
+
+export function useFollowersCount() {
+  return useQuery({
+    queryKey: ['followers-count'],
+    queryFn: fetchFollowersCount,
+    staleTime: 60_000,
   });
 }

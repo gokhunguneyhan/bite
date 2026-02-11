@@ -1,4 +1,5 @@
-import { View, Text, Image, Pressable, Animated, StyleSheet, Alert } from 'react-native';
+import { View, Text, Pressable, Animated, StyleSheet, Alert } from 'react-native';
+import { Image } from 'expo-image';
 import { useEffect, useRef, useState } from 'react';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -79,7 +80,7 @@ export function FullScreenLoader({ thumbnailUrl, videoTitle, channelName, showTo
           <Image
             source={{ uri: thumbnailUrl }}
             style={styles.thumbnail}
-            resizeMode="cover"
+            contentFit="cover"
           />
           <View style={styles.previewInfo}>
             {videoTitle && (

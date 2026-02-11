@@ -19,7 +19,7 @@ import { useToast } from '@/src/components/ui/Toast';
 export default function MoreScreen() {
   const insets = useSafeAreaInsets();
   const { signOut } = useSession();
-  const { language, setLanguage } = useSettingsStore();
+  const { language, setLanguage, selectedTier } = useSettingsStore();
   const showToast = useToast();
   const [showLangPicker, setShowLangPicker] = useState(false);
 
@@ -42,7 +42,7 @@ export default function MoreScreen() {
           text: 'Request Deletion',
           style: 'destructive',
           onPress: () => {
-            Linking.openURL('mailto:support@ytsummarise.com?subject=Data%20Deletion%20Request');
+            Linking.openURL('mailto:support@takeabite.ai?subject=Data%20Deletion%20Request');
             showToast('Data deletion requested. Check your email for confirmation.');
           },
         },
@@ -115,11 +115,11 @@ export default function MoreScreen() {
         <View style={styles.row}>
           <Ionicons name="diamond-outline" size={20} color={Colors.text} />
           <Text style={styles.rowLabel}>Subscription</Text>
-          <Text style={styles.rowValue}>Free</Text>
+          <Text style={styles.rowValue}>{selectedTier === 'free' ? 'Free' : selectedTier === 'pro' ? 'Pro' : 'Power'}</Text>
         </View>
         <Pressable
           style={[styles.row, styles.rowLast]}
-          onPress={() => showToast('Coming soon')}
+          onPress={() => router.push('/paywall')}
           accessibilityLabel="Manage subscription"
           accessibilityRole="button">
           <Ionicons name="card-outline" size={20} color={Colors.text} />

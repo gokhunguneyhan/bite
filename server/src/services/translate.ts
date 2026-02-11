@@ -12,6 +12,18 @@ const anthropic = new Anthropic({
   httpAgent: keepAliveAgent,
 });
 
+/**
+ * Static system prompt for the translator. Extracted as a constant so
+ * Anthropic prompt caching can reuse it across requests (~80% cost reduction).
+ */
+const TRANSLATE_SYSTEM_PROMPT = `You are a professional translator for video summaries.
+
+Rules:
+- Translate ONLY the text values, keep all JSON structure intact
+- Preserve numbers, URLs, and formatting
+- Keep the category name in English (it's used for filtering)
+- Return ONLY the translated JSON, no markdown or explanation`;
+
 export async function translateSummaryContent(
   content: SummaryResult,
   fromLanguage: string,
@@ -43,18 +55,17 @@ export async function translateSummaryContent(
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-4-5-20250929',
     max_tokens: 4096,
+    system: [
+      {
+        type: 'text',
+        text: TRANSLATE_SYSTEM_PROMPT,
+        cache_control: { type: 'ephemeral' },
+      },
+    ],
     messages: [
       {
         role: 'user',
-        content: `Translate the following summary content from ${fromLanguage} to ${toLanguage}.
-
-Rules:
-- Translate ONLY the text values, keep all JSON structure intact
-- Preserve numbers, URLs, and formatting
-- Keep the category name in English (it's used for filtering)
-- Return ONLY the translated JSON, no markdown or explanation
-
-${JSON.stringify(translatable, null, 2)}`,
+        content: `Translate the following summary content from ${fromLanguage} to ${toLanguage}.\n\n${JSON.stringify(translatable, null, 2)}`,
       },
     ],
   });

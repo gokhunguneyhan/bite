@@ -1,4 +1,5 @@
-import { View, Text, Image, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { Colors } from '@/src/constants/colors';
 import type { Summary } from '@/src/types/summary';
@@ -18,7 +19,7 @@ export function SummaryCard({ summary }: SummaryCardProps) {
       <Image
         source={{ uri: summary.thumbnailUrl }}
         style={styles.thumbnail}
-        resizeMode="cover"
+        contentFit="cover"
       />
       <View style={styles.content}>
         <Text style={styles.title} numberOfLines={2}>

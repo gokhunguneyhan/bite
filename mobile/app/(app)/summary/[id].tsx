@@ -3,7 +3,6 @@ import {
   View,
   Text,
   ScrollView,
-  Image,
   Pressable,
   ActivityIndicator,
   StyleSheet,
@@ -13,6 +12,7 @@ import {
   NativeScrollEvent,
   LayoutChangeEvent,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/src/constants/colors';
@@ -285,7 +285,7 @@ export default function SummaryScreen() {
       <Image
         source={{ uri: summary.thumbnailUrl }}
         style={styles.thumbnail}
-        resizeMode="cover"
+        contentFit="cover"
       />
 
       {/* Video meta */}

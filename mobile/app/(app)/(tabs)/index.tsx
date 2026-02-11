@@ -4,12 +4,12 @@ import {
   Pressable,
   ScrollView,
   FlatList,
-  Image,
   StyleSheet,
   ActivityIndicator,
   Dimensions,
   Modal,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { useMemo, useState } from 'react';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -317,7 +317,7 @@ export default function HomeScreen() {
                 <Image
                   source={{ uri: item.thumbnailUrl }}
                   style={styles.communityThumb}
-                  resizeMode="cover"
+                  contentFit="cover"
                 />
                 <View style={styles.communityInfo}>
                   <Text style={styles.communityTitle} numberOfLines={2}>
@@ -365,7 +365,7 @@ export default function HomeScreen() {
                     <Image
                       source={{ uri: s.thumbnailUrl }}
                       style={styles.communityThumb}
-                      resizeMode="cover"
+                      contentFit="cover"
                     />
                     <View style={styles.communityInfo}>
                       <Text style={styles.communityTitle} numberOfLines={2}>
@@ -386,7 +386,7 @@ export default function HomeScreen() {
                   <Image
                     source={{ uri: video.thumbnailUrl }}
                     style={styles.communityThumb}
-                    resizeMode="cover"
+                    contentFit="cover"
                   />
                   <View style={styles.communityInfo}>
                     <Text style={styles.communityTitle} numberOfLines={2}>
@@ -430,7 +430,7 @@ export default function HomeScreen() {
                   <Image
                     source={{ uri: item.thumbnailUrl }}
                     style={styles.refresherSourceThumb}
-                    resizeMode="cover"
+                    contentFit="cover"
                   />
                   <Text style={styles.refresherSourceTitle} numberOfLines={1}>
                     {item.videoTitle}
@@ -476,7 +476,7 @@ export default function HomeScreen() {
                 <Image
                   source={{ uri: video.thumbnailUrl }}
                   style={styles.suggestedCardThumb}
-                  resizeMode="cover"
+                  contentFit="cover"
                 />
                 <View style={styles.suggestedCardInfo}>
                   <Text style={styles.suggestedCardTitle}>
@@ -542,7 +542,7 @@ export default function HomeScreen() {
                   <Image
                     source={{ uri: selectedCard.thumbnailUrl }}
                     style={styles.modalSourceThumb}
-                    resizeMode="cover"
+                    contentFit="cover"
                   />
                   <Text style={styles.modalSourceTitle} numberOfLines={2}>
                     {selectedCard.videoTitle}

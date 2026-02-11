@@ -49,8 +49,26 @@ export const useUserFollowStore = create<UserFollowState>()(
       clear: () => set({ follows: [] }),
     }),
     {
-      name: '@yt_summarise_user_follows',
+      name: '@bite_user_follows',
       storage: createJSONStorage(() => AsyncStorage),
     },
   ),
 );
+
+/**
+ * Fetch the number of users following the current user from Supabase.
+ * Returns 0 if the table doesn't exist yet or on any error.
+ */
+export async function fetchFollowersCount(): Promise<number> {
+  const { supabase } = await import('@/src/lib/supabase');
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return 0;
+
+  const { count, error } = await supabase
+    .from('user_follows')
+    .select('*', { count: 'exact', head: true })
+    .eq('following_id', session.user.id);
+
+  if (error) return 0;
+  return count ?? 0;
+}

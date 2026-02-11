@@ -9,6 +9,7 @@ export function usePreferences() {
   return useQuery({
     queryKey: ['preferences'],
     queryFn: fetchPreferences,
+    staleTime: 5 * 60_000,
   });
 }
 
@@ -16,6 +17,7 @@ export function useOnboardingStatus() {
   return useQuery({
     queryKey: ['onboarding-status'],
     queryFn: hasCompletedOnboarding,
+    staleTime: Infinity,
   });
 }
 

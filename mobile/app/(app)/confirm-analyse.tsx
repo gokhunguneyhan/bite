@@ -2,15 +2,15 @@ import {
   View,
   Text,
   Pressable,
-  Image,
   StyleSheet,
   Alert,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '@/src/constants/colors';
-import { useGenerateSummary, useSummaries } from '@/src/hooks/useSummary';
+import { useGenerateSummary } from '@/src/hooks/useSummary';
 import { FullScreenLoader } from '@/src/components/summary/FullScreenLoader';
 import { useToast } from '@/src/components/ui/Toast';
 import { useSettingsStore } from '@/src/stores/settingsStore';
@@ -27,9 +27,7 @@ export default function ConfirmAnalyseScreen() {
   }>();
 
   const generateMutation = useGenerateSummary();
-  const { data: summaries } = useSummaries();
-  const trialStarted = useSettingsStore((s) => s.trialStarted);
-  const isNewUser = !summaries || summaries.length === 0;
+  const { selectedTier, trialStarted } = useSettingsStore();
 
   // Estimate reading time based on duration label (rough heuristic)
   const estimatedTime = params.durationLabel
@@ -42,7 +40,7 @@ export default function ConfirmAnalyseScreen() {
       return;
     }
 
-    if (isNewUser && !trialStarted) {
+    if (selectedTier === 'free' && !trialStarted) {
       router.push('/paywall');
       return;
     }
@@ -88,7 +86,7 @@ export default function ConfirmAnalyseScreen() {
             <Image
               source={{ uri: params.thumbnailUrl }}
               style={styles.thumbnail}
-              resizeMode="cover"
+              contentFit="cover"
             />
             {params.durationLabel ? (
               <View style={styles.durationBadge}>

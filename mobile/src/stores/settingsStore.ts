@@ -21,11 +21,17 @@ export const LANGUAGES = [
 
 export type LanguageCode = (typeof LANGUAGES)[number]['code'];
 
+export type Tier = 'free' | 'pro' | 'power';
+export type BillingCycle = 'monthly' | 'annual';
+
 interface SettingsState {
   language: LanguageCode;
   setLanguage: (lang: LanguageCode) => void;
   trialStarted: boolean;
   startTrial: () => void;
+  selectedTier: Tier;
+  billingCycle: BillingCycle;
+  selectPlan: (tier: Tier, cycle: BillingCycle) => void;
   lastUserId: string | null;
   setLastUserId: (id: string) => void;
   clear: () => void;
@@ -38,12 +44,22 @@ export const useSettingsStore = create<SettingsState>()(
       setLanguage: (language) => set({ language }),
       trialStarted: false,
       startTrial: () => set({ trialStarted: true }),
+      selectedTier: 'free' as Tier,
+      billingCycle: 'monthly' as BillingCycle,
+      selectPlan: (tier, cycle) => set({ selectedTier: tier, billingCycle: cycle }),
       lastUserId: null,
       setLastUserId: (id) => set({ lastUserId: id }),
-      clear: () => set({ language: 'en', trialStarted: false, lastUserId: null }),
+      clear: () =>
+        set({
+          language: 'en',
+          trialStarted: false,
+          selectedTier: 'free' as Tier,
+          billingCycle: 'monthly' as BillingCycle,
+          lastUserId: null,
+        }),
     }),
     {
-      name: '@yt_summarise_settings',
+      name: '@bite_settings',
       storage: createJSONStorage(() => AsyncStorage),
     },
   ),

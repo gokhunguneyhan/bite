@@ -3,8 +3,8 @@ import type { Summary } from '@/src/types/summary';
 import { supabase } from '@/src/lib/supabase';
 import { apiRequest, ApiError } from './api';
 
-const LOCAL_STORAGE_KEY = '@yt_summarise_summaries';
-const MIGRATION_FLAG = '@yt_summarise_migrated';
+const LOCAL_STORAGE_KEY = '@bite_summaries';
+const MIGRATION_FLAG = '@bite_migrated';
 
 function mapRow(row: Record<string, unknown>): Summary {
   // Backward compat: old actionableInsights may be string[], normalize to {category, insight}[]
@@ -110,12 +110,14 @@ export async function generateSummary(videoId: string): Promise<Summary> {
     return summary;
   } catch (error) {
     if (error instanceof ApiError) {
+      const statusMessages: Record<number, string> = {
+        401: 'Please sign in again to continue.',
+        404: 'This video is unavailable. It may be private, deleted, or region-restricted.',
+        422: 'This video has no captions available. Try another video.',
+        429: 'Too many requests. Please wait a moment and try again.',
+      };
       throw new Error(
-        error.status === 401
-          ? 'Please sign in again to continue.'
-          : error.status === 422
-            ? 'This video has no captions available. Try another video.'
-            : `Server error: ${error.message}`,
+        statusMessages[error.status] ?? `Server error: ${error.message}`,
       );
     }
     throw new Error(

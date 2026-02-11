@@ -86,11 +86,27 @@ except Exception as e:
       durationSeconds: result.durationSeconds || 0,
     };
   } catch (error: any) {
-    if (error.message?.includes('No transcript')) {
+    const msg = error.message ?? '';
+
+    // Already tagged — rethrow as-is
+    if (msg.startsWith('[NO_CAPTIONS]') || msg.startsWith('[VIDEO_UNAVAILABLE]') || msg.startsWith('[RATE_LIMITED]')) {
       throw error;
     }
-    throw new Error(
-      `No transcript available: ${error.message ?? 'unknown error'}`,
-    );
+
+    const lower = msg.toLowerCase();
+
+    if (lower.includes('no transcript') || lower.includes('subtitles are disabled') || lower.includes('transcript is disabled')) {
+      throw new Error(`[NO_CAPTIONS] ${msg}`);
+    }
+
+    if (lower.includes('video unavailable') || lower.includes('video is unavailable') || lower.includes('private video') || lower.includes('video is private')) {
+      throw new Error(`[VIDEO_UNAVAILABLE] ${msg}`);
+    }
+
+    if (lower.includes('too many requests') || lower.includes('rate limit')) {
+      throw new Error(`[RATE_LIMITED] ${msg}`);
+    }
+
+    throw new Error(`[NO_CAPTIONS] No transcript available: ${msg || 'unknown error'}`);
   }
 }

@@ -4,6 +4,7 @@ import cors from 'cors';
 import { fetchVideoMetadata, fetchTranscript } from './services/youtube.js';
 import { generateSummary, calculateTimeoutMs } from './services/summarize.js';
 import { translateSummaryContent } from './services/translate.js';
+import rateLimit from 'express-rate-limit';
 import { requireAuth } from './middleware/auth.js';
 import { supabase } from './lib/supabase.js';
 
@@ -13,13 +14,30 @@ const PORT = process.env.PORT ?? 3000;
 app.use(cors());
 app.use(express.json());
 
+// Rate limiting
+const summarizeLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  limit: 20, // max 20 summarizations per hour per IP
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { error: 'Too many requests. Please try again later.' },
+});
+
+const translateLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  limit: 60, // max 60 translations per hour per IP
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { error: 'Too many translation requests. Please try again later.' },
+});
+
 // Health check
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
 // Generate summary for a YouTube video
-app.post('/api/summarize', requireAuth, async (req, res) => {
+app.post('/api/summarize', summarizeLimiter, requireAuth, async (req, res) => {
   const { videoId } = req.body;
 
   if (!videoId || typeof videoId !== 'string') {
@@ -110,7 +128,21 @@ app.post('/api/summarize', requireAuth, async (req, res) => {
       error instanceof Error ? error.message : 'Unknown error';
     console.error(`[summarize] Error:`, error);
 
-    if (message.includes('transcript')) {
+    if (message.includes('[VIDEO_UNAVAILABLE]')) {
+      res.status(404).json({
+        error: 'This video is unavailable. It may be private, deleted, or region-restricted.',
+      });
+      return;
+    }
+
+    if (message.includes('[RATE_LIMITED]')) {
+      res.status(429).json({
+        error: 'Too many requests. Please try again in a moment.',
+      });
+      return;
+    }
+
+    if (message.includes('[NO_CAPTIONS]') || message.includes('transcript')) {
       res.status(422).json({
         error: 'Could not fetch transcript. The video may not have captions available.',
       });
@@ -122,7 +154,7 @@ app.post('/api/summarize', requireAuth, async (req, res) => {
 });
 
 // Translate an existing summary to a target language
-app.post('/api/translate', requireAuth, async (req, res) => {
+app.post('/api/translate', translateLimiter, requireAuth, async (req, res) => {
   const { summaryId, targetLanguage } = req.body;
 
   if (!summaryId || !targetLanguage) {

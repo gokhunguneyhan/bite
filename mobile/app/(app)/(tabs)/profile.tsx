@@ -4,17 +4,17 @@ import {
   Pressable,
   ScrollView,
   FlatList,
-  Image,
   ActivityIndicator,
   StyleSheet,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { useState, useMemo, useCallback } from 'react';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSession } from '@/src/providers/SessionProvider';
 import { Colors } from '@/src/constants/colors';
-import { useSummaries, useSubscriptions, useImportYouTubeSubscriptions } from '@/src/hooks/useSummary';
+import { useSummaries, useSubscriptions, useImportYouTubeSubscriptions, useFollowersCount } from '@/src/hooks/useSummary';
 import { usePreferences, useOnboardingStatus } from '@/src/hooks/usePreferences';
 import { useToast } from '@/src/components/ui/Toast';
 import { useBookmarkStore, type Bookmark } from '@/src/stores/bookmarkStore';
@@ -34,6 +34,7 @@ export default function ProfileScreen() {
   const bookmarks = useBookmarkStore((s) => s.bookmarks);
   const removeBookmark = useBookmarkStore((s) => s.removeBookmark);
   const follows = useUserFollowStore((s) => s.follows);
+  const { data: followersCountData } = useFollowersCount();
   const { data: preferences } = usePreferences();
   const { data: hasOnboarded } = useOnboardingStatus();
   const showToast = useToast();
@@ -48,8 +49,7 @@ export default function ProfileScreen() {
 
   const summaryCount = summaries?.length ?? 0;
   const followingCount = (subscriptions?.length ?? 0) + follows.length;
-  // TODO: Replace with real data from Supabase
-  const followersCount = 0;
+  const followersCount = followersCountData ?? 0;
 
   const hasPersonalised = hasOnboarded === true;
   const hasSubscriptions = (subscriptions?.length ?? 0) > 0;
@@ -123,7 +123,7 @@ export default function ProfileScreen() {
         <Image
           source={{ uri: item.thumbnailUrl }}
           style={styles.refresherThumb}
-          resizeMode="cover"
+          contentFit="cover"
         />
         <View style={styles.refresherInfo}>
           <Text style={styles.refresherTitle} numberOfLines={2}>
@@ -202,7 +202,7 @@ export default function ProfileScreen() {
                   <Image
                     source={{ uri: s.thumbnailUrl }}
                     style={styles.refresherThumb}
-                    resizeMode="cover"
+                    contentFit="cover"
                   />
                   <View style={styles.refresherInfo}>
                     <Text style={styles.refresherTitle} numberOfLines={2}>

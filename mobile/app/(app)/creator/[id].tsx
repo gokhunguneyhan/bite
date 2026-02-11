@@ -3,10 +3,10 @@ import {
   Text,
   FlatList,
   Pressable,
-  Image,
   ActivityIndicator,
   StyleSheet,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useMemo } from 'react';
 import { Ionicons } from '@expo/vector-icons';
@@ -74,7 +74,7 @@ export default function CreatorScreen() {
       <Image
         source={{ uri: item.thumbnailUrl }}
         style={styles.videoThumb}
-        resizeMode="cover"
+        contentFit="cover"
       />
       <View style={styles.videoDuration}>
         <Text style={styles.videoDurationText}>{item.durationLabel}</Text>
