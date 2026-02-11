@@ -3,11 +3,14 @@ import {
   Text,
   Pressable,
   ScrollView,
+  FlatList,
   Image,
   StyleSheet,
   ActivityIndicator,
+  Dimensions,
+  Modal,
 } from 'react-native';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -20,17 +23,28 @@ import {
 } from '@/src/hooks/useSummary';
 import { usePreferences, useOnboardingStatus } from '@/src/hooks/usePreferences';
 import { useDueCards } from '@/src/hooks/useSpacedRepetition';
-import { VerticalVideoCard } from '@/src/components/summary/VerticalVideoCard';
 import { useToast } from '@/src/components/ui/Toast';
 import { getChannelLatestVideos } from '@/src/services/youtubeImportService';
 import { FEATURED_CREATORS } from '@/src/constants/featuredCreators';
 import { MOCK_CHANNEL_VIDEOS, type YouTubeVideo } from '@/src/mocks/youtubeSubscriptions';
-import type { Summary } from '@/src/types/summary';
+import type { Summary, RefresherCard } from '@/src/types/summary';
 
-type FeedEntry =
-  | { type: 'summary'; data: Summary }
-  | { type: 'personalise' }
-  | { type: 'refresher'; data: Summary }
+const SCREEN_WIDTH = Dimensions.get('window').width;
+const CAROUSEL_CARD_WIDTH = SCREEN_WIDTH * 0.7;
+const CAROUSEL_CARD_GAP = 12;
+
+type FlatRefresherCard = RefresherCard & {
+  summaryId: string;
+  videoTitle: string;
+  thumbnailUrl: string;
+};
+
+type SuggestedVideo = YouTubeVideo & {
+  reason: string;
+};
+
+type CategoryCarouselItem =
+  | { type: 'community'; data: Summary }
   | { type: 'suggestion'; data: YouTubeVideo };
 
 export default function HomeScreen() {
@@ -49,35 +63,26 @@ export default function HomeScreen() {
   const hasPersonalised = hasOnboarded === true;
   const hasSubscriptions = (subscriptions?.length ?? 0) > 0;
 
-  // Summaries that have refresher cards
-  const summariesWithCards = useMemo(
-    () => summaries?.filter((s) => s.refresherCards?.length > 0) ?? [],
-    [summaries],
+  // Top 6 community summaries for "From the community"
+  const topCommunity = useMemo(
+    () => (communitySummaries ?? []).slice(0, 6),
+    [communitySummaries],
   );
 
-  // Community summaries filtered by user's preferred categories
-  const communitySummariesFiltered = useMemo(() => {
-    if (!communitySummaries) return [];
-    if (preferences?.preferredCategories?.length) {
-      const cats = preferences.preferredCategories.map((c) => c.toLowerCase());
-      const filtered = communitySummaries.filter(
-        (s) => s.category && cats.includes(s.category.toLowerCase()),
-      );
-      return filtered.length > 0 ? filtered : communitySummaries;
-    }
-    return communitySummaries;
-  }, [communitySummaries, preferences?.preferredCategories]);
-
-  // Gather video suggestions from subscriptions + interests/categories
-  const suggestions = useMemo(() => {
+  // All video suggestions with reason for why they're suggested
+  const allSuggestions = useMemo(() => {
     const seen = new Set<string>();
-    const result: YouTubeVideo[] = [];
+    const result: SuggestedVideo[] = [];
 
     // From subscribed channels
+    const subscribedNames = new Set((subscriptions ?? []).map((s) => s.channelName));
     if (subscriptions) {
       for (const sub of subscriptions) {
         for (const v of getChannelLatestVideos(sub.channelName)) {
-          if (!seen.has(v.videoId)) { seen.add(v.videoId); result.push(v); }
+          if (!seen.has(v.videoId)) {
+            seen.add(v.videoId);
+            result.push({ ...v, reason: sub.channelName });
+          }
         }
       }
     }
@@ -90,17 +95,26 @@ export default function HomeScreen() {
         if (interestSet.has(creator.category.toLowerCase()) || interests.some((i) => creator.category.toLowerCase().includes(i.toLowerCase()))) {
           const videos = MOCK_CHANNEL_VIDEOS[creator.name] ?? [];
           for (const v of videos) {
-            if (!seen.has(v.videoId)) { seen.add(v.videoId); result.push(v); }
+            if (!seen.has(v.videoId)) {
+              seen.add(v.videoId);
+              const reason = subscribedNames.has(v.channelName)
+                ? v.channelName
+                : creator.category;
+              result.push({ ...v, reason });
+            }
           }
         }
       }
     }
 
-    // If still empty, pull from all featured creators
+    // Fallback
     if (result.length === 0) {
       for (const creator of FEATURED_CREATORS.slice(0, 6)) {
         for (const v of (MOCK_CHANNEL_VIDEOS[creator.name] ?? [])) {
-          if (!seen.has(v.videoId)) { seen.add(v.videoId); result.push(v); }
+          if (!seen.has(v.videoId)) {
+            seen.add(v.videoId);
+            result.push({ ...v, reason: creator.category });
+          }
         }
       }
     }
@@ -109,53 +123,77 @@ export default function HomeScreen() {
     return result;
   }, [subscriptions, preferences?.interests, preferences?.preferredCategories]);
 
-  // Build a single mixed feed — interleave community + suggestions + refreshers
-  const feedItems = useMemo(() => {
-    const items: FeedEntry[] = [];
-    const community = communitySummariesFiltered;
-    const refreshers = [...summariesWithCards];
-    let communityIdx = 0;
-    let refresherIdx = 0;
-    let sugIdx = 0;
+  // Category carousels: mix of community summaries + suggestions per user interest
+  const categoryCarousels = useMemo(() => {
+    const categories = preferences?.preferredCategories ?? preferences?.interests ?? [];
+    if (categories.length === 0) return [];
 
-    // Helper: push next community or suggestion
-    const pushContent = () => {
-      if (communityIdx < community.length) {
-        items.push({ type: 'summary', data: community[communityIdx++] });
-      } else if (sugIdx < suggestions.length) {
-        items.push({ type: 'suggestion', data: suggestions[sugIdx++] });
+    // Map category → creator names
+    const creatorsByCategory: Record<string, Set<string>> = {};
+    for (const creator of FEATURED_CREATORS) {
+      const cat = creator.category.toLowerCase();
+      if (!creatorsByCategory[cat]) creatorsByCategory[cat] = new Set();
+      creatorsByCategory[cat].add(creator.name.toLowerCase());
+    }
+
+    return categories.map((cat) => {
+      const catLower = cat.toLowerCase();
+      const items: CategoryCarouselItem[] = [];
+      const seenIds = new Set<string>();
+
+      // Community summaries matching this category
+      const matching = (communitySummaries ?? []).filter(
+        (s) => s.category && s.category.toLowerCase() === catLower,
+      );
+      for (const s of matching.slice(0, 4)) {
+        seenIds.add(s.videoId);
+        items.push({ type: 'community', data: s });
       }
-    };
 
-    // First 2 items
-    pushContent();
-    pushContent();
+      // Suggestions from creators in this category
+      const creatorNames = creatorsByCategory[catLower] ?? new Set();
+      for (const sug of allSuggestions) {
+        if (items.length >= 8) break;
+        if (seenIds.has(sug.videoId)) continue;
+        if (creatorNames.has(sug.channelName.toLowerCase())) {
+          seenIds.add(sug.videoId);
+          items.push({ type: 'suggestion', data: sug });
+        }
+      }
 
-    // Personalise card (if applicable)
-    if (!hasPersonalised && !hasSubscriptions) {
-      items.push({ type: 'personalise' });
-    }
+      return { category: cat, items };
+    }).filter((c) => c.items.length > 0);
+  }, [preferences?.preferredCategories, preferences?.interests, communitySummaries, allSuggestions]);
 
-    // One refresher
-    if (refresherIdx < refreshers.length) {
-      items.push({ type: 'refresher', data: refreshers[refresherIdx++] });
-    }
-
-    // Fill remaining — alternate community/suggestions, refresher every 3
-    let sinceRefresher = 0;
-    const maxItems = 20;
-    while (items.length < maxItems && (communityIdx < community.length || sugIdx < suggestions.length)) {
-      pushContent();
-      sinceRefresher++;
-
-      if (sinceRefresher === 3 && refresherIdx < refreshers.length) {
-        items.push({ type: 'refresher', data: refreshers[refresherIdx++] });
-        sinceRefresher = 0;
+  // Flat refresher cards — individual cards with source video info
+  const flatRefresherCards = useMemo(() => {
+    const cards: FlatRefresherCard[] = [];
+    for (const s of summaries ?? []) {
+      for (const card of s.refresherCards ?? []) {
+        cards.push({
+          ...card,
+          summaryId: s.id,
+          videoTitle: s.videoTitle,
+          thumbnailUrl: s.thumbnailUrl,
+        });
       }
     }
+    return cards;
+  }, [summaries]);
 
-    return items;
-  }, [communitySummariesFiltered, summariesWithCards, suggestions, hasPersonalised, hasSubscriptions]);
+  // Suggested videos — those not already shown in category carousels
+  const suggestedVideos = useMemo(() => {
+    const usedIds = new Set<string>();
+    for (const c of categoryCarousels) {
+      for (const item of c.items) {
+        if (item.type === 'suggestion') usedIds.add(item.data.videoId);
+      }
+    }
+    return allSuggestions.filter((v) => !usedIds.has(v.videoId));
+  }, [allSuggestions, categoryCarousels]);
+
+  // State for single refresher card modal
+  const [selectedCard, setSelectedCard] = useState<FlatRefresherCard | null>(null);
 
   const handleImportYouTube = () => {
     importMutation.mutate(undefined, {
@@ -190,7 +228,7 @@ export default function HomeScreen() {
           accessibilityRole="button">
           <Ionicons name="add" size={24} color="#fff" />
         </Pressable>
-        <Text style={styles.appTitle}>YT Summarise</Text>
+        <Text style={styles.appTitle}>Bite</Text>
         <Pressable
           style={styles.bellButton}
           accessibilityLabel="Notifications"
@@ -218,160 +256,251 @@ export default function HomeScreen() {
         </Pressable>
       )}
 
-      {/* Single mixed feed */}
-      {feedItems.length > 0 ? (
-        feedItems.map((item, index) => {
-          if (item.type === 'summary') {
-            return <VerticalVideoCard key={`s-${item.data.id}`} summary={item.data} />;
-          }
-
-          if (item.type === 'personalise') {
-            return (
-              <View key="personalise" style={styles.personaliseCard}>
-                <View style={styles.personaliseIconRow}>
-                  <View style={styles.personaliseIcon}>
-                    <Ionicons name="sparkles" size={24} color={Colors.primary} />
-                  </View>
-                </View>
-                <Text style={styles.personaliseTitle}>
-                  Personalise your feed
+      {/* 1. Personalise card */}
+      {!hasPersonalised && !hasSubscriptions && (
+        <View style={styles.personaliseCard}>
+          <View style={styles.personaliseIconRow}>
+            <View style={styles.personaliseIcon}>
+              <Ionicons name="sparkles" size={24} color={Colors.primary} />
+            </View>
+          </View>
+          <Text style={styles.personaliseTitle}>
+            Personalise your feed
+          </Text>
+          <Text style={styles.personaliseSubtitle}>
+            Your time is valuable, so let's curate what matters to you.
+          </Text>
+          <Pressable
+            style={styles.personaliseYouTubeBtn}
+            onPress={handleImportYouTube}
+            disabled={importMutation.isPending}
+            accessibilityLabel="Import subscribed channels from YouTube"
+            accessibilityRole="button">
+            {importMutation.isPending ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <>
+                <Ionicons name="logo-youtube" size={18} color="#fff" />
+                <Text style={styles.personaliseYouTubeBtnText}>
+                  Import Subscribed channels from YouTube
                 </Text>
-                <Text style={styles.personaliseSubtitle}>
-                  Your time is valuable, so let's curate what matters to you.
-                </Text>
-                <Pressable
-                  style={styles.personaliseYouTubeBtn}
-                  onPress={handleImportYouTube}
-                  disabled={importMutation.isPending}
-                  accessibilityLabel="Import subscribed channels from YouTube"
-                  accessibilityRole="button">
-                  {importMutation.isPending ? (
-                    <ActivityIndicator color="#fff" size="small" />
-                  ) : (
-                    <>
-                      <Ionicons name="logo-youtube" size={18} color="#fff" />
-                      <Text style={styles.personaliseYouTubeBtnText}>
-                        Import Subscribed channels from YouTube
-                      </Text>
-                    </>
-                  )}
-                </Pressable>
-                <Pressable
-                  style={styles.personaliseManualBtn}
-                  onPress={() => router.push('/personalise')}
-                  accessibilityLabel="Manually personalise my feed"
-                  accessibilityRole="button">
-                  <Ionicons name="create-outline" size={18} color={Colors.primary} />
-                  <Text style={styles.personaliseManualBtnText}>
-                    Manually personalise my feed
-                  </Text>
-                </Pressable>
-              </View>
-            );
-          }
+              </>
+            )}
+          </Pressable>
+          <Pressable
+            style={styles.personaliseManualBtn}
+            onPress={() => router.push('/personalise')}
+            accessibilityLabel="Manually personalise my feed"
+            accessibilityRole="button">
+            <Ionicons name="create-outline" size={18} color={Colors.primary} />
+            <Text style={styles.personaliseManualBtnText}>
+              Manually personalise my feed
+            </Text>
+          </Pressable>
+        </View>
+      )}
 
-          if (item.type === 'suggestion') {
-            const video = item.data;
-            // Alternate: every other suggestion uses a large card layout
-            const sugCount = feedItems.slice(0, index).filter((i) => i.type === 'suggestion').length;
-            const isLarge = sugCount % 3 === 0;
-            return isLarge ? (
+      {/* 2. From the community carousel */}
+      {topCommunity.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>From the community</Text>
+          <FlatList
+            data={topCommunity}
+            keyExtractor={(item) => item.id}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.carouselContent}
+            renderItem={({ item }) => (
               <Pressable
-                key={`sug-${video.videoId}`}
-                style={styles.suggestionLargeCard}
-                onPress={() => router.push({ pathname: '/confirm-analyse', params: { videoId: video.videoId, title: video.title, channelName: video.channelName, thumbnailUrl: video.thumbnailUrl, durationLabel: video.durationLabel ?? '' } })}
-                accessibilityLabel={`Analyse ${video.title}`}
-                accessibilityRole="button">
+                style={styles.communityCard}
+                onPress={() => router.push(`/summary/${item.id}`)}>
                 <Image
-                  source={{ uri: video.thumbnailUrl }}
-                  style={styles.suggestionLargeThumb}
+                  source={{ uri: item.thumbnailUrl }}
+                  style={styles.communityThumb}
                   resizeMode="cover"
                 />
-                <View style={styles.suggestionLargeInfo}>
-                  <View style={styles.suggestionLargeInfoRow}>
-                    <View style={styles.suggestionLargeTextWrap}>
-                      <Text style={styles.suggestionTitle} numberOfLines={2}>
-                        {video.title}
+                <View style={styles.communityInfo}>
+                  <Text style={styles.communityTitle} numberOfLines={2}>
+                    {item.videoTitle}
+                  </Text>
+                  <Text style={styles.communityMeta} numberOfLines={1}>
+                    {item.channelName}
+                  </Text>
+                  {item.category && item.category !== 'Other' && (
+                    <View style={styles.chipRow}>
+                      <View style={styles.categoryChip}>
+                        <Text style={styles.categoryChipText}>{item.category}</Text>
+                      </View>
+                    </View>
+                  )}
+                </View>
+              </Pressable>
+            )}
+          />
+        </View>
+      )}
+      {isCommunityLoading && topCommunity.length === 0 && (
+        <ActivityIndicator color={Colors.primary} style={styles.loader} />
+      )}
+
+      {/* 3. Category carousels */}
+      {categoryCarousels.map((carousel) => (
+        <View key={carousel.category} style={styles.section}>
+          <Text style={styles.sectionTitle}>{carousel.category}</Text>
+          <FlatList
+            data={carousel.items}
+            keyExtractor={(item, i) =>
+              item.type === 'community' ? `c-${item.data.id}` : `s-${item.data.videoId}-${i}`
+            }
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.carouselContent}
+            renderItem={({ item }) => {
+              if (item.type === 'community') {
+                const s = item.data;
+                return (
+                  <Pressable
+                    style={styles.communityCard}
+                    onPress={() => router.push(`/summary/${s.id}`)}>
+                    <Image
+                      source={{ uri: s.thumbnailUrl }}
+                      style={styles.communityThumb}
+                      resizeMode="cover"
+                    />
+                    <View style={styles.communityInfo}>
+                      <Text style={styles.communityTitle} numberOfLines={2}>
+                        {s.videoTitle}
                       </Text>
-                      <Text style={styles.suggestionChannel} numberOfLines={1}>
+                      <Text style={styles.communityMeta} numberOfLines={1}>
+                        {s.channelName}
+                      </Text>
+                    </View>
+                  </Pressable>
+                );
+              }
+              const video = item.data;
+              return (
+                <Pressable
+                  style={styles.suggestionCarouselCard}
+                  onPress={() => router.push({ pathname: '/confirm-analyse', params: { videoId: video.videoId, title: video.title, channelName: video.channelName, thumbnailUrl: video.thumbnailUrl, durationLabel: video.durationLabel ?? '' } })}>
+                  <Image
+                    source={{ uri: video.thumbnailUrl }}
+                    style={styles.communityThumb}
+                    resizeMode="cover"
+                  />
+                  <View style={styles.communityInfo}>
+                    <Text style={styles.communityTitle} numberOfLines={2}>
+                      {video.title}
+                    </Text>
+                    <View style={styles.suggestionMetaRow}>
+                      <Text style={styles.communityMeta} numberOfLines={1}>
                         {video.channelName}
                         {video.durationLabel ? ` · ${video.durationLabel}` : ''}
                       </Text>
                     </View>
                     <View style={styles.summariseTag}>
-                      <Ionicons name="sparkles" size={12} color="#fff" />
+                      <Ionicons name="sparkles" size={10} color="#fff" />
+                      <Text style={styles.summariseTagText}>Summarise</Text>
+                    </View>
+                  </View>
+                </Pressable>
+              );
+            }}
+          />
+        </View>
+      ))}
+
+      {/* 4. Refresher cards carousel */}
+      {flatRefresherCards.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Refresher cards</Text>
+          <FlatList
+            data={flatRefresherCards}
+            keyExtractor={(item) => `${item.summaryId}-${item.id}`}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.carouselContent}
+            renderItem={({ item }) => (
+              <Pressable
+                style={styles.refresherCard}
+                onPress={() => setSelectedCard(item)}
+                accessibilityLabel={`Refresher: ${item.title}`}
+                accessibilityRole="button">
+                <View style={styles.refresherSourceRow}>
+                  <Image
+                    source={{ uri: item.thumbnailUrl }}
+                    style={styles.refresherSourceThumb}
+                    resizeMode="cover"
+                  />
+                  <Text style={styles.refresherSourceTitle} numberOfLines={1}>
+                    {item.videoTitle}
+                  </Text>
+                </View>
+                <Text style={styles.refresherQuestion} numberOfLines={3}>
+                  {item.title}
+                </Text>
+                <Text style={styles.refresherHint} numberOfLines={2}>
+                  {item.explanation}
+                </Text>
+              </Pressable>
+            )}
+          />
+        </View>
+      )}
+
+      {/* 5. Suggested videos list */}
+      {suggestedVideos.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Suggested for you</Text>
+          {suggestedVideos.map((video) => {
+            const isChannel = (subscriptions ?? []).some(
+              (s) => s.channelName === video.reason,
+            );
+            return (
+              <Pressable
+                key={video.videoId}
+                style={styles.suggestedCard}
+                onPress={() => router.push({ pathname: '/confirm-analyse', params: { videoId: video.videoId, title: video.title, channelName: video.channelName, thumbnailUrl: video.thumbnailUrl, durationLabel: video.durationLabel ?? '' } })}
+                accessibilityLabel={`Analyse ${video.title}`}
+                accessibilityRole="button">
+                <View style={styles.suggestedReasonRow}>
+                  <Ionicons
+                    name={isChannel ? 'person-circle-outline' : 'compass-outline'}
+                    size={14}
+                    color={Colors.textSecondary}
+                  />
+                  <Text style={styles.suggestedReasonText}>
+                    {isChannel ? video.reason : video.reason}
+                  </Text>
+                </View>
+                <Image
+                  source={{ uri: video.thumbnailUrl }}
+                  style={styles.suggestedCardThumb}
+                  resizeMode="cover"
+                />
+                <View style={styles.suggestedCardInfo}>
+                  <Text style={styles.suggestedCardTitle}>
+                    {video.title}
+                  </Text>
+                  <View style={styles.suggestedCardMeta}>
+                    <Text style={styles.suggestedCardChannel}>
+                      {video.channelName}
+                      {video.durationLabel ? ` · ${video.durationLabel}` : ''}
+                    </Text>
+                    <View style={styles.summariseTagSmall}>
+                      <Ionicons name="sparkles" size={10} color="#fff" />
                       <Text style={styles.summariseTagText}>Summarise</Text>
                     </View>
                   </View>
                 </View>
               </Pressable>
-            ) : (
-              <Pressable
-                key={`sug-${video.videoId}`}
-                style={styles.suggestionCard}
-                onPress={() => router.push({ pathname: '/confirm-analyse', params: { videoId: video.videoId, title: video.title, channelName: video.channelName, thumbnailUrl: video.thumbnailUrl, durationLabel: video.durationLabel ?? '' } })}
-                accessibilityLabel={`Analyse ${video.title}`}
-                accessibilityRole="button">
-                <Image
-                  source={{ uri: video.thumbnailUrl }}
-                  style={styles.suggestionThumb}
-                  resizeMode="cover"
-                />
-                <View style={styles.suggestionInfo}>
-                  <Text style={styles.suggestionTitle} numberOfLines={2}>
-                    {video.title}
-                  </Text>
-                  <Text style={styles.suggestionChannel} numberOfLines={1}>
-                    {video.channelName}
-                    {video.durationLabel ? ` · ${video.durationLabel}` : ''}
-                  </Text>
-                </View>
-                <View style={styles.summariseTag}>
-                  <Ionicons name="sparkles" size={12} color="#fff" />
-                  <Text style={styles.summariseTagText}>Summarise</Text>
-                </View>
-              </Pressable>
             );
-          }
+          })}
+        </View>
+      )}
 
-          if (item.type === 'refresher') {
-            const s = item.data;
-            const firstCard = s.refresherCards[0];
-            const totalCards = s.refresherCards.length;
-            return (
-              <Pressable
-                key={`r-${s.id}`}
-                style={styles.inlineRefresher}
-                onPress={() => router.push(`/refresher/${s.id}`)}
-                accessibilityLabel={`Refresher cards for ${s.videoTitle}`}
-                accessibilityRole="button">
-                <View style={styles.inlineRefresherTop}>
-                  <Image
-                    source={{ uri: s.thumbnailUrl }}
-                    style={styles.inlineRefresherThumb}
-                    resizeMode="cover"
-                  />
-                  <View style={styles.inlineRefresherMeta}>
-                    <Text style={styles.inlineRefresherVideoTitle} numberOfLines={2}>
-                      {s.videoTitle}
-                    </Text>
-                  </View>
-                </View>
-                <Text style={styles.inlineRefresherQuestion} numberOfLines={2}>
-                  {firstCard?.title ?? 'Review your knowledge'}
-                </Text>
-                <Text style={styles.inlineRefresherLink}>
-                  View {totalCards > 1 ? `${totalCards - 1} others` : 'card'} from this video →
-                </Text>
-              </Pressable>
-            );
-          }
-
-          return null;
-        })
-      ) : isCommunityLoading ? (
-        <ActivityIndicator color={Colors.primary} style={styles.loader} />
-      ) : (
+      {/* Empty state */}
+      {topCommunity.length === 0 && !isCommunityLoading && suggestedVideos.length === 0 && categoryCarousels.length === 0 && (
         <View style={styles.placeholder}>
           <Ionicons
             name="earth-outline"
@@ -386,6 +515,48 @@ export default function HomeScreen() {
 
       {/* Bottom padding */}
       <View style={{ height: 40 }} />
+
+      {/* Single refresher card modal */}
+      <Modal
+        visible={selectedCard !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedCard(null)}>
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setSelectedCard(null)}>
+          <Pressable style={styles.modalCard} onPress={() => {}}>
+            <Pressable
+              style={styles.modalCloseBtn}
+              onPress={() => setSelectedCard(null)}
+              accessibilityLabel="Close"
+              accessibilityRole="button">
+              <Ionicons name="close" size={22} color={Colors.text} />
+            </Pressable>
+            {selectedCard && (
+              <ScrollView
+                style={styles.modalScrollContent}
+                contentContainerStyle={styles.modalInner}
+                showsVerticalScrollIndicator={false}>
+                <View style={styles.modalSourceRow}>
+                  <Image
+                    source={{ uri: selectedCard.thumbnailUrl }}
+                    style={styles.modalSourceThumb}
+                    resizeMode="cover"
+                  />
+                  <Text style={styles.modalSourceTitle} numberOfLines={2}>
+                    {selectedCard.videoTitle}
+                  </Text>
+                </View>
+                <Text style={styles.modalQuestion}>{selectedCard.title}</Text>
+                <Text style={styles.modalExplanation}>
+                  {selectedCard.explanation}
+                </Text>
+              </ScrollView>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </ScrollView>
   );
 }
@@ -396,7 +567,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
   },
   content: {
-    padding: 24,
     paddingTop: 16,
     paddingBottom: 100,
   },
@@ -411,6 +581,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 20,
+    paddingHorizontal: 24,
   },
   addButton: {
     width: 40,
@@ -440,6 +611,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 14,
     marginBottom: 20,
+    marginHorizontal: 24,
   },
   dueBannerLeft: {
     flexDirection: 'row',
@@ -458,7 +630,8 @@ const styles = StyleSheet.create({
     padding: 24,
     alignItems: 'center',
     gap: 12,
-    marginBottom: 16,
+    marginBottom: 8,
+    marginHorizontal: 24,
     borderWidth: 1,
     borderColor: Colors.primary + '20',
   },
@@ -521,112 +694,248 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  // Inline refresher card
-  inlineRefresher: {
-    backgroundColor: Colors.surface,
-    borderRadius: 12,
-    padding: 14,
-    gap: 10,
-    marginBottom: 16,
+  // Section
+  section: {
+    marginTop: 20,
   },
-  inlineRefresherTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  inlineRefresherThumb: {
-    width: 60,
-    height: 40,
-    borderRadius: 6,
-    backgroundColor: Colors.border,
-  },
-  inlineRefresherMeta: {
-    flex: 1,
-  },
-  inlineRefresherVideoTitle: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    lineHeight: 16,
-  },
-  inlineRefresherQuestion: {
-    fontSize: 15,
-    fontWeight: '600',
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
     color: Colors.text,
-    lineHeight: 20,
+    marginBottom: 12,
+    paddingHorizontal: 24,
   },
-  inlineRefresherLink: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: Colors.primary,
+  // Carousel shared
+  carouselContent: {
+    paddingHorizontal: 24,
+    gap: CAROUSEL_CARD_GAP,
   },
-  // Suggestion cards — large variant
-  suggestionLargeCard: {
+  // Community / category carousel card
+  communityCard: {
+    width: CAROUSEL_CARD_WIDTH,
     backgroundColor: Colors.surface,
     borderRadius: 12,
     overflow: 'hidden',
-    marginBottom: 16,
   },
-  suggestionLargeThumb: {
+  communityThumb: {
     width: '100%',
     aspectRatio: 16 / 9,
     backgroundColor: Colors.border,
   },
-  suggestionLargeInfo: {
-    padding: 14,
+  communityInfo: {
+    padding: 10,
     gap: 4,
   },
-  suggestionLargeInfoRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-  },
-  suggestionLargeTextWrap: {
-    flex: 1,
-    gap: 4,
-  },
-  // Suggestion cards — compact variant
-  suggestionCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.surface,
-    borderRadius: 12,
-    padding: 12,
-    gap: 12,
-    marginBottom: 12,
-  },
-  suggestionThumb: {
-    width: 100,
-    height: 56,
-    borderRadius: 8,
-    backgroundColor: Colors.border,
-  },
-  suggestionInfo: {
-    flex: 1,
-    gap: 4,
-  },
-  suggestionTitle: {
+  communityTitle: {
     fontSize: 14,
     fontWeight: '600',
     color: Colors.text,
     lineHeight: 18,
   },
-  suggestionChannel: {
+  communityMeta: {
     fontSize: 12,
     color: Colors.textSecondary,
+  },
+  chipRow: {
+    flexDirection: 'row',
+    marginTop: 4,
+  },
+  categoryChip: {
+    backgroundColor: Colors.primary + '15',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  categoryChipText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: Colors.primary,
+  },
+  // Suggestion card inside category carousel
+  suggestionCarouselCard: {
+    width: CAROUSEL_CARD_WIDTH,
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  suggestionMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   summariseTag: {
     flexDirection: 'row',
     alignItems: 'center',
+    alignSelf: 'flex-start',
     gap: 4,
     backgroundColor: Colors.primary,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    marginTop: 4,
+  },
+  summariseTagSmall: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: Colors.primary,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
   },
   summariseTagText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
     color: '#fff',
+  },
+  // Refresher carousel card
+  refresherCard: {
+    width: CAROUSEL_CARD_WIDTH,
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    padding: 14,
+    gap: 8,
+  },
+  refresherSourceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  refresherSourceThumb: {
+    width: 44,
+    height: 28,
+    borderRadius: 4,
+    backgroundColor: Colors.border,
+  },
+  refresherSourceTitle: {
+    flex: 1,
+    fontSize: 11,
+    color: Colors.textSecondary,
+    lineHeight: 14,
+  },
+  refresherQuestion: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.text,
+    lineHeight: 20,
+  },
+  refresherHint: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    lineHeight: 16,
+  },
+  // Suggested videos — vertical cards
+  suggestedCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginHorizontal: 24,
+    marginBottom: 16,
+  },
+  suggestedReasonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 8,
+  },
+  suggestedReasonText: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    fontWeight: '500',
+  },
+  suggestedCardThumb: {
+    width: '100%',
+    aspectRatio: 16 / 9,
+    backgroundColor: Colors.border,
+  },
+  suggestedCardInfo: {
+    padding: 12,
+    gap: 8,
+  },
+  suggestedCardTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.text,
+    lineHeight: 20,
+  },
+  suggestedCardMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  suggestedCardChannel: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    flex: 1,
+  },
+  // Modal for single refresher card
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalCard: {
+    backgroundColor: Colors.background,
+    borderRadius: 20,
+    width: '100%',
+    maxHeight: '70%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 24,
+    elevation: 10,
+  },
+  modalCloseBtn: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    zIndex: 10,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.surface,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalScrollContent: {
+    borderRadius: 20,
+  },
+  modalInner: {
+    padding: 24,
+    paddingTop: 20,
+    gap: 16,
+  },
+  modalSourceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingRight: 36,
+  },
+  modalSourceThumb: {
+    width: 56,
+    height: 36,
+    borderRadius: 6,
+    backgroundColor: Colors.border,
+  },
+  modalSourceTitle: {
+    flex: 1,
+    fontSize: 13,
+    color: Colors.textSecondary,
+    lineHeight: 17,
+  },
+  modalQuestion: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: Colors.text,
+    lineHeight: 28,
+  },
+  modalExplanation: {
+    fontSize: 16,
+    color: Colors.textSecondary,
+    lineHeight: 26,
   },
   // Placeholders
   placeholder: {
@@ -635,7 +944,8 @@ const styles = StyleSheet.create({
     padding: 24,
     alignItems: 'center',
     gap: 10,
-    marginBottom: 16,
+    marginHorizontal: 24,
+    marginTop: 20,
   },
   placeholderText: {
     fontSize: 14,
@@ -643,7 +953,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
   },
-  // Community
   loader: {
     marginVertical: 20,
   },

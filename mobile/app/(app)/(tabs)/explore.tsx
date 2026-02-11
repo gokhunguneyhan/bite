@@ -7,6 +7,8 @@ import {
   Image,
   StyleSheet,
   ActivityIndicator,
+  Dimensions,
+  Modal,
 } from 'react-native';
 import { useState, useMemo, useCallback } from 'react';
 import { router } from 'expo-router';
@@ -26,6 +28,23 @@ import { CATEGORIES } from '@/src/types/summary';
 import { VerticalVideoCard } from '@/src/components/summary/VerticalVideoCard';
 import type { Summary } from '@/src/types/summary';
 
+const SCREEN_WIDTH = Dimensions.get('window').width;
+
+const CATEGORY_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
+  'Technology & AI': 'hardware-chip-outline',
+  'Business & Startups': 'briefcase-outline',
+  'Finance & Investing': 'cash-outline',
+  'Science & Space': 'flask-outline',
+  'Health & Fitness': 'fitness-outline',
+  'Self-Improvement': 'trending-up-outline',
+  'Education & Learning': 'school-outline',
+  'Creative & Design': 'color-palette-outline',
+  'Politics & Society': 'megaphone-outline',
+  'Entertainment & Media': 'film-outline',
+  'Lifestyle & Culture': 'cafe-outline',
+  'Career & Professional Growth': 'ribbon-outline',
+};
+
 type ChipFilter = 'All' | 'Trending' | string;
 
 export default function ExploreScreen() {
@@ -33,6 +52,7 @@ export default function ExploreScreen() {
   const [searchActive, setSearchActive] = useState(false);
   const [search, setSearch] = useState('');
   const [selectedChip, setSelectedChip] = useState<ChipFilter>('All');
+  const [categoryTrayVisible, setCategoryTrayVisible] = useState(false);
 
   const { data: communitySummaries, isLoading } = useCommunitySummaries();
   const { data: preferences } = usePreferences();
@@ -185,13 +205,20 @@ export default function ExploreScreen() {
         </View>
       )}
 
-      {/* Chip filters (when NOT searching) */}
+      {/* Chip filters with compass icon (when NOT searching) */}
       {!searchActive && (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           style={styles.chipScroll}
           contentContainerStyle={styles.chipContent}>
+          <Pressable
+            style={styles.compassChip}
+            onPress={() => setCategoryTrayVisible(true)}
+            accessibilityLabel="Browse all categories"
+            accessibilityRole="button">
+            <Ionicons name="compass-outline" size={20} color={Colors.text} />
+          </Pressable>
           {chips.map((chip) => {
             const isSelected = chip === selectedChip;
             return (
@@ -294,61 +321,53 @@ export default function ExploreScreen() {
           </View>
         ) : (
           <>
-            {/* Community summaries */}
-            {hasSummaries && (
-              <>
-                {selectedChip !== 'All' && (
-                  <Text style={styles.sectionTitle}>Community Summaries</Text>
-                )}
-                {filteredSummaries.slice(0, 6).map((s) => (
-                  <VerticalVideoCard key={s.id} summary={s} />
-                ))}
-              </>
-            )}
-
-            {/* Channels for this category */}
+            {/* 1. Channels for this category (carousel) */}
             {hasCreators && (
-              <View style={styles.channelGridSection}>
+              <View style={styles.channelSection}>
                 <Text style={styles.sectionTitle}>
                   {selectedChip !== 'All' && selectedChip !== 'Trending'
                     ? `${selectedChip} Channels`
-                    : 'Top Channels to Follow'}
+                    : 'Top Channels'}
                 </Text>
-                <View style={styles.channelGrid}>
-                  {categoryCreators.slice(0, 4).map((creator) => {
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.channelCarouselScroll}
+                  contentContainerStyle={styles.channelCarouselContent}>
+                  {categoryCreators.slice(0, 8).map((creator) => {
                     const isFollowed = followedChannels.has(
                       creator.name.toLowerCase(),
                     );
                     return (
-                      <View key={creator.name} style={styles.channelGridCell}>
-                        <Pressable
-                          onPress={() =>
-                            router.push({
-                              pathname: '/creator/[id]',
-                              params: { id: creator.name },
-                            })
-                          }
-                          style={styles.channelGridAvatarWrap}>
-                          <View style={styles.channelGridAvatar}>
-                            <Text style={styles.channelGridInitial}>
-                              {creator.name.charAt(0)}
-                            </Text>
-                          </View>
-                        </Pressable>
-                        <Text style={styles.channelGridName} numberOfLines={1}>
-                          {creator.name}
-                        </Text>
-                        <View style={styles.channelGridTag}>
-                          <Text style={styles.channelGridTagText} numberOfLines={1}>
-                            {creator.category}
+                      <Pressable
+                        key={creator.name}
+                        style={styles.channelCarouselCard}
+                        onPress={() =>
+                          router.push({
+                            pathname: '/creator/[id]',
+                            params: { id: creator.name },
+                          })
+                        }>
+                        <View style={styles.channelCarouselAvatar}>
+                          <Text style={styles.channelCarouselInitial}>
+                            {creator.name.charAt(0)}
                           </Text>
                         </View>
+                        <Text style={styles.channelCarouselName} numberOfLines={1}>
+                          {creator.name}
+                        </Text>
+                        <Text style={styles.channelCarouselDesc} numberOfLines={1}>
+                          {creator.description}
+                        </Text>
                         <Pressable
                           style={[
                             styles.followButton,
                             isFollowed && styles.followButtonActive,
                           ]}
-                          onPress={() => handleToggleFollow(creator.name)}
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            handleToggleFollow(creator.name);
+                          }}
                           accessibilityLabel={
                             isFollowed
                               ? `Unfollow ${creator.name}`
@@ -363,64 +382,76 @@ export default function ExploreScreen() {
                             {isFollowed ? 'Following' : 'Follow'}
                           </Text>
                         </Pressable>
-                      </View>
+                      </Pressable>
                     );
                   })}
-                </View>
+                </ScrollView>
               </View>
             )}
 
-            {/* Latest videos from YouTube (real RSS data) */}
+            {/* 2. Latest videos in grid style */}
             {isLoadingVideos && (
               <ActivityIndicator color={Colors.primary} style={styles.videoLoader} />
             )}
             {hasVideos && (
               <>
                 <Text style={styles.sectionTitle}>Latest Videos</Text>
-                {categoryVideos!.map((video) => (
-                  <Pressable
-                    key={video.videoId}
-                    style={styles.videoCard}
-                    onPress={() =>
-                      router.push({
-                        pathname: '/confirm-analyse',
-                        params: {
-                          videoId: video.videoId,
-                          title: video.title,
-                          channelName: video.channelName,
-                          thumbnailUrl: video.thumbnailUrl,
-                          durationLabel: video.durationLabel ?? '',
-                        },
-                      })
-                    }
-                    accessibilityLabel={`Summarise ${video.title}`}
-                    accessibilityRole="button">
-                    <Image
-                      source={{ uri: video.thumbnailUrl }}
-                      style={styles.videoThumb}
-                      resizeMode="cover"
-                    />
-                    <View style={styles.videoInfo}>
-                      <Text style={styles.videoTitle} numberOfLines={2}>
-                        {video.title}
-                      </Text>
-                      <Text style={styles.videoChannel} numberOfLines={1}>
-                        {video.channelName}
-                      </Text>
-                    </View>
-                    <View style={styles.summariseTag}>
-                      <Ionicons name="sparkles" size={12} color="#fff" />
-                      <Text style={styles.summariseTagText}>Summarise</Text>
-                    </View>
-                  </Pressable>
-                ))}
+                <View style={styles.videoGrid}>
+                  {categoryVideos!.map((video) => (
+                    <Pressable
+                      key={video.videoId}
+                      style={styles.videoGridCard}
+                      onPress={() =>
+                        router.push({
+                          pathname: '/confirm-analyse',
+                          params: {
+                            videoId: video.videoId,
+                            title: video.title,
+                            channelName: video.channelName,
+                            thumbnailUrl: video.thumbnailUrl,
+                            durationLabel: video.durationLabel ?? '',
+                          },
+                        })
+                      }
+                      accessibilityLabel={`Summarise ${video.title}`}
+                      accessibilityRole="button">
+                      <Image
+                        source={{ uri: video.thumbnailUrl }}
+                        style={styles.videoGridThumb}
+                        resizeMode="cover"
+                      />
+                      {video.durationLabel ? (
+                        <View style={styles.durationBadge}>
+                          <Text style={styles.durationText}>{video.durationLabel}</Text>
+                        </View>
+                      ) : null}
+                      <View style={styles.videoGridInfo}>
+                        <Text style={styles.videoGridTitle} numberOfLines={2}>
+                          {video.title}
+                        </Text>
+                        <View style={styles.videoGridMeta}>
+                          <Text style={styles.videoGridChannel} numberOfLines={1}>
+                            {video.channelName}
+                          </Text>
+                          <View style={styles.summariseTag}>
+                            <Ionicons name="sparkles" size={10} color="#fff" />
+                            <Text style={styles.summariseTagText}>Summarise</Text>
+                          </View>
+                        </View>
+                      </View>
+                    </Pressable>
+                  ))}
+                </View>
               </>
             )}
 
-            {/* More community summaries after channels & videos */}
-            {hasSummaries && filteredSummaries.length > 6 && (
+            {/* 3. Community summaries */}
+            {hasSummaries && (
               <>
-                {filteredSummaries.slice(6).map((s) => (
+                <Text style={styles.sectionTitle}>
+                  {selectedChip !== 'All' ? 'Community Summaries' : 'Popular Summaries'}
+                </Text>
+                {filteredSummaries.slice(0, 12).map((s) => (
                   <VerticalVideoCard key={s.id} summary={s} />
                 ))}
               </>
@@ -442,6 +473,47 @@ export default function ExploreScreen() {
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      {/* Category tray modal */}
+      <Modal
+        visible={categoryTrayVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setCategoryTrayVisible(false)}>
+        <View style={styles.trayOverlay}>
+          <Pressable
+            style={styles.trayBackdrop}
+            onPress={() => setCategoryTrayVisible(false)}
+          />
+          <View style={styles.traySheet}>
+            <View style={styles.trayHandle} />
+            <Text style={styles.trayTitle}>Browse categories</Text>
+            <ScrollView
+              style={styles.trayList}
+              showsVerticalScrollIndicator={false}>
+              {CATEGORIES.filter((c) => c !== 'Other').map((cat) => (
+                <Pressable
+                  key={cat}
+                  style={styles.trayRow}
+                  onPress={() => {
+                    setCategoryTrayVisible(false);
+                    setSelectedChip(cat);
+                  }}
+                  accessibilityLabel={`Browse ${cat}`}
+                  accessibilityRole="button">
+                  <Ionicons
+                    name={CATEGORY_ICONS[cat] ?? 'apps-outline'}
+                    size={22}
+                    color={Colors.text}
+                  />
+                  <Text style={styles.trayRowText}>{cat}</Text>
+                </Pressable>
+              ))}
+              <View style={{ height: 40 }} />
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -509,6 +581,16 @@ const styles = StyleSheet.create({
     gap: 8,
     alignItems: 'center',
   },
+  compassChip: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    backgroundColor: Colors.surface,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   chip: {
     paddingHorizontal: 16,
     paddingVertical: 8,
@@ -545,63 +627,56 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     marginTop: 8,
   },
-  // Channel grid
-  channelGridSection: {
-    marginBottom: 16,
-    marginTop: 8,
+  // Channel carousel
+  channelSection: {
+    marginBottom: 8,
   },
-  channelGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  channelCarouselScroll: {
+    marginHorizontal: -24,
+  },
+  channelCarouselContent: {
+    paddingHorizontal: 24,
     gap: 12,
   },
-  channelGridCell: {
-    width: '48%',
+  channelCarouselCard: {
+    width: 120,
     backgroundColor: Colors.surface,
     borderRadius: 12,
     padding: 14,
     alignItems: 'center',
     gap: 6,
   },
-  channelGridAvatarWrap: {
-    marginBottom: 2,
-  },
-  channelGridAvatar: {
+  channelCarouselAvatar: {
     width: 48,
     height: 48,
     borderRadius: 24,
     backgroundColor: Colors.primary + '15',
     justifyContent: 'center',
     alignItems: 'center',
+    marginBottom: 2,
   },
-  channelGridInitial: {
+  channelCarouselInitial: {
     fontSize: 20,
     fontWeight: '700',
     color: Colors.primary,
   },
-  channelGridName: {
-    fontSize: 14,
+  channelCarouselName: {
+    fontSize: 13,
     fontWeight: '600',
     color: Colors.text,
     textAlign: 'center',
   },
-  channelGridTag: {
-    backgroundColor: Colors.primary + '12',
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 24,
-  },
-  channelGridTagText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: Colors.primary,
+  channelCarouselDesc: {
+    fontSize: 10,
+    color: Colors.textSecondary,
+    textAlign: 'center',
   },
   followButton: {
     borderWidth: 1.5,
     borderColor: Colors.primary,
     borderRadius: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 5,
     marginTop: 2,
   },
   followButtonActive: {
@@ -609,54 +684,77 @@ const styles = StyleSheet.create({
     borderColor: Colors.primary + '40',
   },
   followButtonText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
     color: Colors.primary,
   },
   followButtonTextActive: {
     color: Colors.primary,
   },
-  // Video cards (YouTube RSS)
-  videoCard: {
+  // Video grid
+  videoGrid: {
     flexDirection: 'row',
-    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 8,
+  },
+  videoGridCard: {
+    width: (SCREEN_WIDTH - 24 * 2 - 12) / 2,
     backgroundColor: Colors.surface,
     borderRadius: 12,
-    padding: 12,
-    gap: 12,
-    marginBottom: 12,
+    overflow: 'hidden',
   },
-  videoThumb: {
-    width: 100,
-    height: 56,
-    borderRadius: 8,
+  videoGridThumb: {
+    width: '100%',
+    aspectRatio: 16 / 9,
     backgroundColor: Colors.border,
   },
-  videoInfo: {
-    flex: 1,
-    gap: 4,
+  durationBadge: {
+    position: 'absolute',
+    top: (((SCREEN_WIDTH - 24 * 2 - 12) / 2) * 9) / 16 - 24,
+    right: 6,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    borderRadius: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
   },
-  videoTitle: {
-    fontSize: 14,
+  durationText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  videoGridInfo: {
+    padding: 10,
+    gap: 6,
+  },
+  videoGridTitle: {
+    fontSize: 13,
     fontWeight: '600',
     color: Colors.text,
-    lineHeight: 18,
+    lineHeight: 17,
   },
-  videoChannel: {
-    fontSize: 12,
+  videoGridMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 4,
+  },
+  videoGridChannel: {
+    fontSize: 11,
     color: Colors.textSecondary,
+    flex: 1,
   },
   summariseTag: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 3,
     backgroundColor: Colors.primary,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
   },
   summariseTagText: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '600',
     color: '#fff',
   },
@@ -733,5 +831,52 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: Colors.primary,
+  },
+  // Category tray
+  trayOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  trayBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  traySheet: {
+    backgroundColor: Colors.background,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '75%',
+    paddingTop: 12,
+  },
+  trayHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: Colors.border,
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
+  trayTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: Colors.text,
+    paddingHorizontal: 24,
+    marginBottom: 8,
+  },
+  trayList: {
+    paddingHorizontal: 24,
+  },
+  trayRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.border,
+  },
+  trayRowText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: Colors.text,
   },
 });

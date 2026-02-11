@@ -4,17 +4,21 @@ import {
   TextInput,
   Pressable,
   ScrollView,
-  FlatList,
+  Image,
   StyleSheet,
   ActivityIndicator,
+  Dimensions,
 } from 'react-native';
 import { useState, useMemo } from 'react';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/src/constants/colors';
 import { useCommunitySummaries } from '@/src/hooks/useSummary';
+import { useCategoryVideos } from '@/src/hooks/useCategoryVideos';
 import { FEATURED_CREATORS } from '@/src/constants/featuredCreators';
 import { VerticalVideoCard } from '@/src/components/summary/VerticalVideoCard';
+
+const SCREEN_WIDTH = Dimensions.get('window').width;
 
 export default function CategoryScreen() {
   const { name } = useLocalSearchParams<{ name: string }>();
@@ -22,6 +26,8 @@ export default function CategoryScreen() {
   const [search, setSearch] = useState('');
 
   const categoryName = decodeURIComponent(name || '');
+
+  const { data: categoryVideos, isLoading: isLoadingVideos } = useCategoryVideos(categoryName);
 
   const creatorsInCategory = useMemo(
     () => FEATURED_CREATORS.filter((c) => c.category === categoryName),
@@ -44,107 +50,168 @@ export default function CategoryScreen() {
     return result;
   }, [communitySummaries, categoryName, search]);
 
+  const hasVideos = (categoryVideos?.length ?? 0) > 0;
+
   return (
-    <FlatList
+    <ScrollView
       style={styles.container}
-      data={categorySummaries}
-      keyExtractor={(item) => item.id}
-      renderItem={({ item }) => <VerticalVideoCard summary={item} />}
       contentContainerStyle={styles.listContent}
-      keyboardDismissMode="on-drag"
-      ListHeaderComponent={
-        <View>
-          {/* Search within category */}
-          <View style={styles.searchContainer}>
+      showsVerticalScrollIndicator={false}
+      keyboardDismissMode="on-drag">
+      {/* Search within category */}
+      <View style={styles.searchContainer}>
+        <Ionicons
+          name="search-outline"
+          size={18}
+          color={Colors.tabIconDefault}
+        />
+        <TextInput
+          style={styles.searchInput}
+          placeholder={`Search in ${categoryName}...`}
+          value={search}
+          onChangeText={setSearch}
+          placeholderTextColor={Colors.tabIconDefault}
+          accessibilityLabel={`Search ${categoryName}`}
+        />
+        {search.trim().length > 0 && (
+          <Pressable onPress={() => setSearch('')}>
             <Ionicons
-              name="search-outline"
+              name="close-circle"
               size={18}
               color={Colors.tabIconDefault}
             />
-            <TextInput
-              style={styles.searchInput}
-              placeholder={`Search in ${categoryName}...`}
-              value={search}
-              onChangeText={setSearch}
-              placeholderTextColor={Colors.tabIconDefault}
-              accessibilityLabel={`Search ${categoryName}`}
-            />
-            {search.trim().length > 0 && (
-              <Pressable onPress={() => setSearch('')}>
-                <Ionicons
-                  name="close-circle"
-                  size={18}
-                  color={Colors.tabIconDefault}
-                />
-              </Pressable>
-            )}
-          </View>
+          </Pressable>
+        )}
+      </View>
 
-          {/* Popular channels in category */}
-          {creatorsInCategory.length > 0 && (
-            <>
-              <Text style={styles.sectionTitle}>
-                Popular channels in {categoryName}
-              </Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={styles.horizontalScroll}
-                contentContainerStyle={styles.horizontalContent}>
-                {creatorsInCategory.map((creator) => (
-                  <Pressable
-                    key={creator.name}
-                    style={styles.creatorChip}
-                    onPress={() =>
-                      router.push({
-                        pathname: '/creator/[id]',
-                        params: { id: creator.name },
-                      })
-                    }
-                    accessibilityLabel={`View ${creator.name}`}
-                    accessibilityRole="button">
-                    <View style={styles.creatorAvatar}>
-                      <Text style={styles.creatorInitial}>
-                        {creator.name.charAt(0)}
-                      </Text>
-                    </View>
-                    <Text style={styles.creatorName} numberOfLines={1}>
-                      {creator.name}
-                    </Text>
-                    <Text style={styles.creatorDesc} numberOfLines={1}>
-                      {creator.description}
-                    </Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
-            </>
-          )}
-
-          {/* Summaries count */}
+      {/* 1. Channels carousel */}
+      {creatorsInCategory.length > 0 && (
+        <>
           <Text style={styles.sectionTitle}>
-            {categorySummaries.length > 0
-              ? `${categorySummaries.length} summar${categorySummaries.length !== 1 ? 'ies' : 'y'}`
-              : 'Summaries'}
+            Channels in {categoryName}
+          </Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.channelCarouselScroll}
+            contentContainerStyle={styles.channelCarouselContent}>
+            {creatorsInCategory.map((creator) => (
+              <Pressable
+                key={creator.name}
+                style={styles.channelCard}
+                onPress={() =>
+                  router.push({
+                    pathname: '/creator/[id]',
+                    params: { id: creator.name },
+                  })
+                }
+                accessibilityLabel={`View ${creator.name}`}
+                accessibilityRole="button">
+                <View style={styles.channelAvatar}>
+                  <Text style={styles.channelInitial}>
+                    {creator.name.charAt(0)}
+                  </Text>
+                </View>
+                <Text style={styles.channelName} numberOfLines={1}>
+                  {creator.name}
+                </Text>
+                <Text style={styles.channelDesc} numberOfLines={1}>
+                  {creator.description}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </>
+      )}
+
+      {/* 2. Latest videos in grid */}
+      {isLoadingVideos && (
+        <ActivityIndicator color={Colors.primary} style={styles.loader} />
+      )}
+      {hasVideos && (
+        <>
+          <Text style={styles.sectionTitle}>Latest Videos</Text>
+          <View style={styles.videoGrid}>
+            {categoryVideos!.map((video) => (
+              <Pressable
+                key={video.videoId}
+                style={styles.videoGridCard}
+                onPress={() =>
+                  router.push({
+                    pathname: '/confirm-analyse',
+                    params: {
+                      videoId: video.videoId,
+                      title: video.title,
+                      channelName: video.channelName,
+                      thumbnailUrl: video.thumbnailUrl,
+                      durationLabel: video.durationLabel ?? '',
+                    },
+                  })
+                }
+                accessibilityLabel={`Summarise ${video.title}`}
+                accessibilityRole="button">
+                <Image
+                  source={{ uri: video.thumbnailUrl }}
+                  style={styles.videoGridThumb}
+                  resizeMode="cover"
+                />
+                {video.durationLabel ? (
+                  <View style={styles.durationBadge}>
+                    <Text style={styles.durationText}>{video.durationLabel}</Text>
+                  </View>
+                ) : null}
+                <View style={styles.videoGridInfo}>
+                  <Text style={styles.videoGridTitle} numberOfLines={2}>
+                    {video.title}
+                  </Text>
+                  <View style={styles.videoGridMeta}>
+                    <Text style={styles.videoGridChannel} numberOfLines={1}>
+                      {video.channelName}
+                    </Text>
+                    <View style={styles.summariseTag}>
+                      <Ionicons name="sparkles" size={10} color="#fff" />
+                      <Text style={styles.summariseTagText}>Summarise</Text>
+                    </View>
+                  </View>
+                </View>
+              </Pressable>
+            ))}
+          </View>
+        </>
+      )}
+
+      {/* 3. Community summaries */}
+      {categorySummaries.length > 0 && (
+        <>
+          <Text style={styles.sectionTitle}>
+            {categorySummaries.length} summar{categorySummaries.length !== 1 ? 'ies' : 'y'}
+          </Text>
+          {categorySummaries.map((s) => (
+            <VerticalVideoCard key={s.id} summary={s} />
+          ))}
+        </>
+      )}
+
+      {/* Empty state */}
+      {!isLoading && !isLoadingVideos && categorySummaries.length === 0 && !hasVideos && creatorsInCategory.length === 0 && (
+        <View style={styles.emptyState}>
+          <Ionicons
+            name="document-text-outline"
+            size={48}
+            color={Colors.tabIconDefault}
+          />
+          <Text style={styles.emptyText}>
+            No content in {categoryName} yet.
           </Text>
         </View>
-      }
-      ListEmptyComponent={
-        isLoading ? (
-          <ActivityIndicator color={Colors.primary} style={styles.loader} />
-        ) : (
-          <View style={styles.emptyState}>
-            <Ionicons
-              name="document-text-outline"
-              size={48}
-              color={Colors.tabIconDefault}
-            />
-            <Text style={styles.emptyText}>
-              No community summaries in {categoryName} yet.
-            </Text>
-          </View>
-        )
-      }
-    />
+      )}
+
+      {isLoading && categorySummaries.length === 0 && (
+        <ActivityIndicator color={Colors.primary} style={styles.loader} />
+      )}
+
+      <View style={{ height: 40 }} />
+    </ScrollView>
   );
 }
 
@@ -173,47 +240,120 @@ const styles = StyleSheet.create({
     color: Colors.text,
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '600',
     color: Colors.text,
     marginBottom: 12,
+    marginTop: 8,
   },
-  horizontalScroll: {
+  // Channel carousel
+  channelCarouselScroll: {
     marginHorizontal: -24,
-    marginBottom: 20,
+    marginBottom: 16,
   },
-  horizontalContent: {
+  channelCarouselContent: {
     paddingHorizontal: 24,
     gap: 12,
   },
-  creatorChip: {
+  channelCard: {
+    width: 120,
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    padding: 14,
     alignItems: 'center',
-    width: 100,
     gap: 4,
   },
-  creatorAvatar: {
+  channelAvatar: {
     width: 48,
     height: 48,
     borderRadius: 24,
     backgroundColor: Colors.primary + '15',
     justifyContent: 'center',
     alignItems: 'center',
+    marginBottom: 4,
   },
-  creatorInitial: {
+  channelInitial: {
     fontSize: 18,
     fontWeight: '700',
     color: Colors.primary,
   },
-  creatorName: {
-    fontSize: 12,
+  channelName: {
+    fontSize: 13,
     fontWeight: '600',
     color: Colors.text,
     textAlign: 'center',
   },
-  creatorDesc: {
+  channelDesc: {
     fontSize: 10,
     color: Colors.textSecondary,
     textAlign: 'center',
+  },
+  // Video grid
+  videoGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 8,
+  },
+  videoGridCard: {
+    width: (SCREEN_WIDTH - 24 * 2 - 12) / 2,
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  videoGridThumb: {
+    width: '100%',
+    aspectRatio: 16 / 9,
+    backgroundColor: Colors.border,
+  },
+  durationBadge: {
+    position: 'absolute',
+    top: (((SCREEN_WIDTH - 24 * 2 - 12) / 2) * 9) / 16 - 24,
+    right: 6,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    borderRadius: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+  },
+  durationText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  videoGridInfo: {
+    padding: 10,
+    gap: 6,
+  },
+  videoGridTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.text,
+    lineHeight: 17,
+  },
+  videoGridMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 4,
+  },
+  videoGridChannel: {
+    fontSize: 11,
+    color: Colors.textSecondary,
+    flex: 1,
+  },
+  summariseTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: Colors.primary,
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+  },
+  summariseTagText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#fff',
   },
   emptyState: {
     alignItems: 'center',
@@ -227,6 +367,6 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   loader: {
-    marginTop: 40,
+    marginTop: 20,
   },
 });
