@@ -391,6 +391,65 @@ app.get('/api/video/:videoId', async (req, res) => {
   }
 });
 
+// Fetch latest videos from a YouTube channel (server-side API key, no user auth)
+app.get('/api/channel/:channelId/videos', async (req, res) => {
+  const { channelId } = req.params;
+  const maxResults = Math.min(Number(req.query.maxResults) || 5, 20);
+
+  const apiKey = process.env.YOUTUBE_API_KEY;
+  if (!apiKey) {
+    res.status(500).json({ error: 'YouTube API key not configured' });
+    return;
+  }
+
+  try {
+    const url = new URL('https://www.googleapis.com/youtube/v3/search');
+    url.searchParams.set('part', 'snippet');
+    url.searchParams.set('channelId', channelId);
+    url.searchParams.set('order', 'date');
+    url.searchParams.set('type', 'video');
+    url.searchParams.set('maxResults', String(maxResults));
+    url.searchParams.set('key', apiKey);
+
+    const ytRes = await fetch(url.toString());
+    if (!ytRes.ok) {
+      const body = await ytRes.text();
+      console.error(`[channel-videos] YouTube API error ${ytRes.status}:`, body);
+      res.status(ytRes.status).json({ error: 'YouTube API error' });
+      return;
+    }
+
+    const data = await ytRes.json() as {
+      items?: Array<{
+        id: { videoId: string };
+        snippet: {
+          title: string;
+          channelTitle: string;
+          thumbnails: Record<string, { url: string }>;
+          publishedAt: string;
+        };
+      }>;
+    };
+
+    const videos = (data.items ?? []).map((item) => ({
+      videoId: item.id.videoId,
+      title: item.snippet.title,
+      channelName: item.snippet.channelTitle,
+      thumbnailUrl:
+        item.snippet.thumbnails.high?.url ??
+        item.snippet.thumbnails.medium?.url ??
+        '',
+      publishedAt: item.snippet.publishedAt,
+      durationLabel: '',
+    }));
+
+    res.json({ videos });
+  } catch (error) {
+    console.error('[channel-videos] Error:', error);
+    res.status(500).json({ error: 'Failed to fetch channel videos' });
+  }
+});
+
 // Task 3: Analytics Endpoints
 
 /**

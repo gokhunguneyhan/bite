@@ -66,44 +66,19 @@ export async function fetchYouTubeSubscriptions(): Promise<YouTubeSubscription[]
 
 /**
  * Fetch latest videos from a YouTube channel.
+ * Uses the server-side YouTube API key — no OAuth required.
  */
 export async function fetchChannelLatestVideos(
   channelId: string,
   maxResults = 5,
 ): Promise<YouTubeVideo[]> {
-  const accessToken = await getGoogleAccessToken();
-  if (!accessToken) return [];
-
-  const url = new URL(`${YT_API_BASE}/search`);
-  url.searchParams.set('part', 'snippet');
-  url.searchParams.set('channelId', channelId);
-  url.searchParams.set('order', 'date');
-  url.searchParams.set('type', 'video');
-  url.searchParams.set('maxResults', String(maxResults));
-
-  const res = await fetch(url.toString(), {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-
-  if (!res.ok) return [];
-
-  const data = await res.json();
-
-  const videos: YouTubeVideo[] = (data.items ?? []).map(
-    (item: Record<string, unknown>) => {
-      const snippet = item.snippet as Record<string, unknown>;
-      const id = item.id as Record<string, unknown>;
-      const thumbs = snippet.thumbnails as Record<string, Record<string, string>> | undefined;
-      return {
-        videoId: id.videoId as string,
-        title: snippet.title as string,
-        channelName: snippet.channelTitle as string,
-        thumbnailUrl: thumbs?.high?.url ?? thumbs?.medium?.url ?? '',
-        publishedAt: snippet.publishedAt as string,
-        durationLabel: '',
-      };
-    },
-  );
-
-  return videos;
+  try {
+    const { apiRequest } = await import('./api');
+    const data = await apiRequest<{ videos: YouTubeVideo[] }>(
+      `/api/channel/${channelId}/videos?maxResults=${maxResults}`,
+    );
+    return data.videos;
+  } catch {
+    return [];
+  }
 }
