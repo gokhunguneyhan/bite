@@ -37,6 +37,10 @@ import { SectionNavigator } from '@/src/components/summary/SectionNavigator';
 import type { SectionKey } from '@/src/components/summary/SectionNavigator';
 import { VerticalVideoCard } from '@/src/components/summary/VerticalVideoCard';
 import { useToast } from '@/src/components/ui/Toast';
+import { useTTS } from '@/src/hooks/useTTS';
+import { useOfflineStore } from '@/src/stores/offlineStore';
+import { useRevenueCat } from '@/src/providers/RevenueCatProvider';
+import MiniYouTubePlayer, { PLAYER_HEIGHT } from '@/src/components/summary/MiniYouTubePlayer';
 import type { Summary } from '@/src/types/summary';
 
 function formatTimestamp(seconds: number): string {
@@ -83,7 +87,18 @@ export default function SummaryScreen() {
   // isAnonymous is local state for now -- TODO: persist to Supabase
   const [isAnonymous, setIsAnonymous] = useState(false);
 
+  // Inline YouTube player
+  const [inlinePlayer, setInlinePlayer] = useState<{
+    videoId: string;
+    startSeconds: number;
+    sectionTitle: string;
+  } | null>(null);
+
+  const { isPro } = useRevenueCat();
   const showToast = useToast();
+
+  // Offline
+  const isOfflineCached = useOfflineStore((s) => s.isCached(id));
 
   // Like store
   const isLiked = useLikeStore((s) => s.isLiked(id));
@@ -157,6 +172,9 @@ export default function SummaryScreen() {
       language,
     };
   }, [summary, needsTranslation, showOriginal, translatedContent, language]);
+
+  // TTS (must be after displaySummary)
+  const tts = useTTS({ summary: displaySummary, language, isPro });
 
   const handleTranslate = () => {
     translateMutation.mutate(
@@ -276,6 +294,7 @@ export default function SummaryScreen() {
     displaySummary.affiliateLinks.filter((l) => l.category === 'recommended');
 
   return (
+    <View style={styles.container}>
     <ScrollView
       style={styles.container}
       ref={scrollRef}
@@ -301,6 +320,12 @@ export default function SummaryScreen() {
           </Text>
           {summary.category && summary.category !== 'Other' && (
             <Text style={styles.categoryTag}>{summary.category}</Text>
+          )}
+          {isOfflineCached && (
+            <View style={styles.offlineBadge}>
+              <Ionicons name="cloud-done-outline" size={12} color={Colors.success} />
+              <Text style={styles.offlineBadgeText}>Offline</Text>
+            </View>
           )}
         </View>
         {isShowingTranslation && (
@@ -349,6 +374,33 @@ export default function SummaryScreen() {
             </Text>
           </Pressable>
         )}
+        <Pressable
+          style={[styles.actionPill, tts.status === 'playing' && styles.actionPillActive]}
+          onPress={tts.toggle}
+          disabled={tts.isLoading}>
+          {tts.isLoading ? (
+            <ActivityIndicator color={Colors.primary} size={14} />
+          ) : (
+            <Ionicons
+              name={tts.status === 'playing' ? 'pause' : 'headset-outline'}
+              size={16}
+              color={tts.status !== 'idle' ? Colors.primary : Colors.textSecondary}
+            />
+          )}
+          <Text style={[styles.actionPillText, tts.status !== 'idle' && { color: Colors.primary }]}>
+            {tts.isLoading ? 'Loading...' : tts.status === 'playing' ? 'Pause' : tts.status === 'paused' ? 'Resume' : 'Listen'}
+          </Text>
+          {tts.status === 'playing' && (
+            <Pressable onPress={tts.stop} hitSlop={8}>
+              <Ionicons name="stop" size={14} color={Colors.primary} />
+            </Pressable>
+          )}
+          {!isPro && tts.status === 'idle' && (
+            <View style={styles.proBadge}>
+              <Text style={styles.proBadgeText}>PRO</Text>
+            </View>
+          )}
+        </Pressable>
         <Pressable
           style={styles.actionPill}
           onPress={() => toggleLike(id)}>
@@ -465,6 +517,10 @@ export default function SummaryScreen() {
               channelName={summary.channelName}
               videoId={summary.videoId}
               timestampStart={section.timestampStart}
+              onPlay={(vid, start, title) => {
+                if (tts.status === 'playing') tts.stop();
+                setInlinePlayer({ videoId: vid, startSeconds: start, sectionTitle: title });
+              }}
             />
           </View>
         ))}
@@ -673,8 +729,18 @@ export default function SummaryScreen() {
         </Pressable>
       </ScrollView>
 
-      <View style={{ height: 60 }} />
+      <View style={{ height: inlinePlayer ? PLAYER_HEIGHT + 80 : 60 }} />
     </ScrollView>
+
+    {inlinePlayer && (
+      <MiniYouTubePlayer
+        videoId={inlinePlayer.videoId}
+        startSeconds={inlinePlayer.startSeconds}
+        sectionTitle={inlinePlayer.sectionTitle}
+        onClose={() => setInlinePlayer(null)}
+      />
+    )}
+    </View>
   );
 }
 
@@ -739,6 +805,32 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     overflow: 'hidden',
   },
+  offlineBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: Colors.success + '15',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  offlineBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: Colors.success,
+  },
+  proBadge: {
+    backgroundColor: Colors.primary,
+    borderRadius: 4,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    marginLeft: 2,
+  },
+  proBadgeText: {
+    color: '#fff',
+    fontSize: 8,
+    fontWeight: '700',
+  },
   translationNotice: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -771,6 +863,11 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 20,
     backgroundColor: Colors.surface,
+  },
+  actionPillActive: {
+    backgroundColor: Colors.primary + '15',
+    borderWidth: 1,
+    borderColor: Colors.primary + '30',
   },
   actionPillDisabled: {
     opacity: 0.6,

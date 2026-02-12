@@ -13,7 +13,7 @@ import { Colors } from '@/src/constants/colors';
 import { useGenerateSummary } from '@/src/hooks/useSummary';
 import { FullScreenLoader } from '@/src/components/summary/FullScreenLoader';
 import { useToast } from '@/src/components/ui/Toast';
-import { useSettingsStore } from '@/src/stores/settingsStore';
+import { useRevenueCat } from '@/src/providers/RevenueCatProvider';
 
 export default function ConfirmAnalyseScreen() {
   const insets = useSafeAreaInsets();
@@ -27,7 +27,7 @@ export default function ConfirmAnalyseScreen() {
   }>();
 
   const generateMutation = useGenerateSummary();
-  const { selectedTier, trialStarted } = useSettingsStore();
+  const { isPro } = useRevenueCat();
 
   // Estimate reading time based on duration label (rough heuristic)
   const estimatedTime = params.durationLabel
@@ -40,7 +40,7 @@ export default function ConfirmAnalyseScreen() {
       return;
     }
 
-    if (selectedTier === 'free' && !trialStarted) {
+    if (!isPro) {
       router.push('/paywall');
       return;
     }

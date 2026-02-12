@@ -15,6 +15,8 @@ import { useLikeStore } from '@/src/stores/likeStore';
 import { useUserFollowStore } from '@/src/stores/userFollowStore';
 import { useYouTubeStore } from '@/src/stores/youtubeStore';
 import { useSettingsStore } from '@/src/stores/settingsStore';
+import { useOfflineStore } from '@/src/stores/offlineStore';
+import Purchases from 'react-native-purchases';
 
 interface Profile {
   id: string;
@@ -95,6 +97,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
       useLikeStore.getState().clear();
       useUserFollowStore.getState().clear();
       useYouTubeStore.getState().clear();
+      useOfflineStore.getState().clear();
       if (settings.lastUserId) settings.clear(); // only reset prefs on actual user switch
       useSettingsStore.getState().setLastUserId(userId);
     }
@@ -118,7 +121,10 @@ export function SessionProvider({ children }: PropsWithChildren) {
     const { error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { full_name: fullName } },
+      options: {
+        data: { full_name: fullName },
+        emailRedirectTo: 'bite://login',
+      },
     });
     if (error) throw error;
   }
@@ -152,7 +158,9 @@ export function SessionProvider({ children }: PropsWithChildren) {
     useLikeStore.getState().clear();
     useUserFollowStore.getState().clear();
     useYouTubeStore.getState().clear();
+    useOfflineStore.getState().clear();
     useSettingsStore.getState().clear();
+    Purchases.logOut().catch((e) => console.error('[RevenueCat] Logout error:', e));
     supabase.auth.signOut();
   }
 

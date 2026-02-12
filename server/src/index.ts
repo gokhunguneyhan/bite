@@ -1,9 +1,13 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import { fetchVideoMetadata, fetchTranscript } from './services/youtube.js';
-import { generateSummary, calculateTimeoutMs } from './services/summarize.js';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'url';
+import { dirname, join, resolve } from 'path';
+import { fetchVideoMetadata, getTranscriptWithFallback } from './services/youtube.js';
+import { getCachedSummary, calculateTimeoutMs } from './services/summarize.js';
 import { translateSummaryContent } from './services/translate.js';
+import { getOrGenerateAudio } from './services/tts.js';
 import rateLimit from 'express-rate-limit';
 import { requireAuth } from './middleware/auth.js';
 import { supabase } from './lib/supabase.js';
@@ -13,6 +17,11 @@ const PORT = process.env.PORT ?? 3000;
 
 app.use(cors());
 app.use(express.json());
+
+// Serve static files (admin dashboard)
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const publicDir = resolve(__dirname, '..', 'public');
 
 // Rate limiting
 const summarizeLimiter = rateLimit({
@@ -24,16 +33,30 @@ const summarizeLimiter = rateLimit({
 });
 
 const translateLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  limit: 60, // max 60 translations per hour per IP
+  windowMs: 60 * 60 * 1000,
+  limit: 60,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   message: { error: 'Too many translation requests. Please try again later.' },
 });
 
+const ttsLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 30,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { error: 'TTS rate limit exceeded. Try again later.' },
+});
+
 // Health check
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
+});
+
+// Admin dashboard
+app.get('/admin', (_req, res) => {
+  const html = readFileSync(join(publicDir, 'admin.html'), 'utf-8');
+  res.type('html').send(html);
 });
 
 // Generate summary for a YouTube video
@@ -51,7 +74,7 @@ app.post('/api/summarize', summarizeLimiter, requireAuth, async (req, res) => {
     // Fetch metadata and transcript in parallel
     const [metadata, transcriptResult] = await Promise.all([
       fetchVideoMetadata(videoId),
-      fetchTranscript(videoId),
+      getTranscriptWithFallback(videoId),
     ]);
 
     const { text: transcript, languageCode: originalLanguage, durationSeconds } = transcriptResult;
@@ -63,8 +86,16 @@ app.post('/api/summarize', summarizeLimiter, requireAuth, async (req, res) => {
       `[summarize] Got transcript (${transcript.length} chars, lang=${originalLanguage}, duration=${Math.round(durationSeconds / 60)}min) for "${metadata.title}" — timeout ${timeoutMs / 1000}s`,
     );
 
-    // Generate summary in the video's original language
-    const summary = await generateSummary(transcript, metadata.title, timeoutMs);
+    // Generate summary in the video's original language (with caching)
+    // Task 1: Result Caching - Check cache first, generate if miss, store if hit
+    const summary = await getCachedSummary(
+      videoId,
+      transcript,
+      metadata.title,
+      metadata.channelName,
+      durationSeconds,
+      timeoutMs,
+    );
 
     console.log(`[summarize] Summary generated for "${metadata.title}"`);
 
@@ -222,6 +253,62 @@ app.post('/api/translate', translateLimiter, requireAuth, async (req, res) => {
   }
 });
 
+// ── Audio TTS endpoint ──
+app.post('/api/tts', ttsLimiter, requireAuth, async (req, res) => {
+  try {
+    const { summaryId } = req.body;
+
+    if (!summaryId) {
+      res.status(400).json({ error: 'summaryId is required' });
+      return;
+    }
+
+    if (!supabase) {
+      res.status(500).json({ error: 'Database not configured' });
+      return;
+    }
+
+    const { data: summary, error: fetchError } = await supabase
+      .from('summaries')
+      .select('id, quick_summary, contextual_sections, video_title')
+      .eq('id', summaryId)
+      .single();
+
+    if (fetchError || !summary) {
+      res.status(404).json({ error: 'Summary not found' });
+      return;
+    }
+
+    const sections = (summary.contextual_sections || []) as Array<{
+      title: string;
+      content: string;
+    }>;
+
+    const narrationParts = [
+      summary.video_title,
+      '',
+      summary.quick_summary,
+      '',
+      ...sections.flatMap((s) => [s.title, s.content, '']),
+    ];
+
+    const fullText = narrationParts.join('\n').trim();
+    // OpenAI TTS has a 4096 char limit per request — truncate for MVP
+    const truncatedText = fullText.slice(0, 4096);
+
+    const result = await getOrGenerateAudio({
+      summaryId,
+      text: truncatedText,
+      videoTitle: summary.video_title,
+    });
+
+    res.json(result);
+  } catch (err: any) {
+    console.error('[tts] Error:', err.message);
+    res.status(500).json({ error: 'Audio generation failed' });
+  }
+});
+
 // Toggle publish status for a summary
 app.post('/api/summaries/:id/publish', requireAuth, async (req, res) => {
   const { id } = req.params;
@@ -301,6 +388,104 @@ app.get('/api/video/:videoId', async (req, res) => {
     res.json(metadata);
   } catch {
     res.status(404).json({ error: 'Video not found' });
+  }
+});
+
+// Task 3: Analytics Endpoints
+
+/**
+ * Get most popular videos (by request count)
+ * Used to identify which videos benefit most from caching
+ */
+app.get('/api/admin/popular-videos', async (req, res) => {
+  try {
+    if (!supabase) {
+      res.status(500).json({ error: 'Database not configured' });
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('summary_cache')
+      .select('video_id, video_title, channel_name, request_count, created_at')
+      .order('request_count', { ascending: false })
+      .limit(50);
+
+    if (error) {
+      console.error('[analytics] Popular videos query failed:', error);
+      res.status(500).json({ error: 'Failed to fetch popular videos' });
+      return;
+    }
+
+    console.log(`[analytics] Popular videos: ${(data ?? []).length} entries`);
+
+    res.json({
+      success: true,
+      videos: data ?? [],
+      totalCached: (data ?? []).length,
+    });
+  } catch (error: any) {
+    console.error('[analytics] Popular videos exception:', error);
+    res.status(500).json({ error: error.message || 'Unknown error' });
+  }
+});
+
+/**
+ * Get cache statistics
+ * Shows hit rate, total requests, unique videos, avg requests per video
+ */
+app.get('/api/admin/cache-stats', async (req, res) => {
+  try {
+    if (!supabase) {
+      res.status(500).json({ error: 'Database not configured' });
+      return;
+    }
+
+    const { data, error } = await supabase.from('summary_cache').select('request_count');
+
+    if (error) {
+      console.error('[analytics] Cache stats query failed:', error);
+      res.status(500).json({ error: 'Failed to fetch cache stats' });
+      return;
+    }
+
+    const cacheData = data ?? [];
+
+    // Calculate metrics
+    const totalRequests = cacheData.reduce((sum, row) => sum + row.request_count, 0);
+    const uniqueVideos = cacheData.length;
+
+    // Cache hit rate = (total requests - unique videos) / total requests * 100
+    // Because each unique video = 1 generation, rest are cache hits
+    const cacheHitRate =
+      uniqueVideos > 0 ? (((totalRequests - uniqueVideos) / totalRequests) * 100).toFixed(2) : '0.00';
+
+    const avgRequestsPerVideo = uniqueVideos > 0 ? (totalRequests / uniqueVideos).toFixed(2) : '0.00';
+
+    const costSavings = {
+      totalGenerations: uniqueVideos,
+      totalCacheHits: Math.max(0, totalRequests - uniqueVideos),
+      costPerGeneration: 0.11, // Claude Sonnet 4.5 summarization (~25K input tokens × $3/M + ~1K output tokens × $15/M)
+      savedCost: ((totalRequests - uniqueVideos) * 0.11).toFixed(2),
+      totalCost: (uniqueVideos * 0.11).toFixed(2),
+    };
+
+    console.log(
+      `[analytics] Cache stats: ${totalRequests} requests, ${uniqueVideos} unique videos, ${cacheHitRate}% hit rate`,
+    );
+
+    res.json({
+      success: true,
+      stats: {
+        totalRequests,
+        uniqueVideos,
+        cacheHitRate: `${cacheHitRate}%`,
+        avgRequestsPerVideo,
+        costSavings,
+      },
+    });
+  } catch (error: any) {
+    console.error('[analytics] Cache stats exception:', error);
+    res.status(500).json({ error: error.message || 'Unknown error' });
   }
 });
 

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Redirect, Stack } from 'expo-router';
 import { Text, View } from 'react-native';
 import { useSession } from '@/src/providers/SessionProvider';
+import { RevenueCatProvider } from '@/src/providers/RevenueCatProvider';
 import { migrateLocalSummaries } from '@/src/services/summaryService';
 import { Toast } from '@/src/components/ui/Toast';
 
@@ -37,58 +38,60 @@ export default function AppLayout() {
   }
 
   return (
-    <View style={{ flex: 1 }}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen
-          name="analyse"
-          options={{ title: 'Analyse', headerBackTitle: 'Back' }}
-        />
-        <Stack.Screen
-          name="summary/[id]"
-          options={{ title: 'Summary', headerBackTitle: 'Back' }}
-        />
-        <Stack.Screen
-          name="refresher/[id]"
-          options={{
-            title: 'Refresher Cards',
-            presentation: 'fullScreenModal',
-          }}
-        />
-        <Stack.Screen
-          name="category/[name]"
-          options={{ headerBackTitle: 'Back' }}
-        />
-        <Stack.Screen
-          name="creator/[id]"
-          options={{ title: 'Creator Profile', headerBackTitle: 'Back' }}
-        />
-        <Stack.Screen
-          name="following"
-          options={{ title: 'Following', headerBackTitle: 'Back' }}
-        />
-        <Stack.Screen
-          name="followers"
-          options={{ title: 'Followers', headerBackTitle: 'Back' }}
-        />
-        <Stack.Screen
-          name="paywall"
-          options={{ title: '', presentation: 'modal', headerShown: false }}
-        />
-        <Stack.Screen
-          name="confirm-analyse"
-          options={{ title: 'Analyse Video', headerBackTitle: 'Back' }}
-        />
-        <Stack.Screen
-          name="personalise"
-          options={{ title: 'Personalise', presentation: 'fullScreenModal' }}
-        />
-        <Stack.Screen
-          name="review"
-          options={{ title: 'Review Cards', presentation: 'fullScreenModal' }}
-        />
-      </Stack>
-      <Toast />
-    </View>
+    <RevenueCatProvider>
+      <View style={{ flex: 1 }}>
+        <Stack>
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen
+            name="analyse"
+            options={{ title: 'Analyse', headerBackTitle: 'Back' }}
+          />
+          <Stack.Screen
+            name="summary/[id]"
+            options={{ title: 'Summary', headerBackTitle: 'Back' }}
+          />
+          <Stack.Screen
+            name="refresher/[id]"
+            options={{
+              title: 'Refresher Cards',
+              presentation: 'fullScreenModal',
+            }}
+          />
+          <Stack.Screen
+            name="category/[name]"
+            options={{ headerBackTitle: 'Back' }}
+          />
+          <Stack.Screen
+            name="creator/[id]"
+            options={{ title: 'Creator Profile', headerBackTitle: 'Back' }}
+          />
+          <Stack.Screen
+            name="following"
+            options={{ title: 'Following', headerBackTitle: 'Back' }}
+          />
+          <Stack.Screen
+            name="followers"
+            options={{ title: 'Followers', headerBackTitle: 'Back' }}
+          />
+          <Stack.Screen
+            name="paywall"
+            options={{ title: '', presentation: 'modal', headerShown: false }}
+          />
+          <Stack.Screen
+            name="confirm-analyse"
+            options={{ title: 'Analyse Video', headerBackTitle: 'Back' }}
+          />
+          <Stack.Screen
+            name="personalise"
+            options={{ title: 'Personalise', presentation: 'fullScreenModal' }}
+          />
+          <Stack.Screen
+            name="review"
+            options={{ title: 'Review Cards', presentation: 'fullScreenModal' }}
+          />
+        </Stack>
+        <Toast />
+      </View>
+    </RevenueCatProvider>
   );
 }

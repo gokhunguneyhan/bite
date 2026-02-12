@@ -6,22 +6,32 @@ import {
   Alert,
   Linking,
   StyleSheet,
+  ActivityIndicator,
 } from 'react-native';
 import { useState } from 'react';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSession } from '@/src/providers/SessionProvider';
+import { useRevenueCat } from '@/src/providers/RevenueCatProvider';
 import { Colors } from '@/src/constants/colors';
 import { useSettingsStore, LANGUAGES } from '@/src/stores/settingsStore';
 import { useToast } from '@/src/components/ui/Toast';
+import { supabase } from '@/src/lib/supabase';
+import { useBookmarkStore } from '@/src/stores/bookmarkStore';
+import { useLikeStore } from '@/src/stores/likeStore';
+import { useUserFollowStore } from '@/src/stores/userFollowStore';
+import { useYouTubeStore } from '@/src/stores/youtubeStore';
+import { useOfflineStore } from '@/src/stores/offlineStore';
 
 export default function MoreScreen() {
   const insets = useSafeAreaInsets();
   const { signOut } = useSession();
-  const { language, setLanguage, selectedTier } = useSettingsStore();
+  const { isPro, showCustomerCenter } = useRevenueCat();
+  const { language, setLanguage } = useSettingsStore();
   const showToast = useToast();
   const [showLangPicker, setShowLangPicker] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const currentLang = LANGUAGES.find((l) => l.code === language);
 
@@ -35,15 +45,41 @@ export default function MoreScreen() {
   const handleDeleteData = () => {
     Alert.alert(
       'Delete My Data',
-      'This will send a data deletion request to our team. Your account and all associated data will be permanently removed within 30 days. This action cannot be undone.',
+      'This will permanently delete your account, subscriptions, and personal data. Your generated summaries will be anonymized and kept for the community.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Request Deletion',
+          text: 'Delete My Data',
           style: 'destructive',
-          onPress: () => {
-            Linking.openURL('mailto:support@takeabite.ai?subject=Data%20Deletion%20Request');
-            showToast('Data deletion requested. Check your email for confirmation.');
+          onPress: async () => {
+            setIsDeleting(true);
+            try {
+              const { data: { session } } = await supabase.auth.getSession();
+              if (session?.user) {
+                const userId = session.user.id;
+                // Anonymize summaries (not personal data — keep for cache/community)
+                // Delete personal data: subscriptions, profile
+                await Promise.allSettled([
+                  supabase.from('summaries').update({ user_id: null }).eq('user_id', userId),
+                  supabase.from('creator_subscriptions').delete().eq('user_id', userId),
+                  supabase.from('profiles').delete().eq('id', userId),
+                ]);
+              }
+              // Clear all local stores
+              useBookmarkStore.getState().clear();
+              useLikeStore.getState().clear();
+              useUserFollowStore.getState().clear();
+              useYouTubeStore.getState().clear();
+              useOfflineStore.getState().clear();
+              useSettingsStore.getState().clear();
+              // Sign out
+              signOut();
+              showToast('Your personal data has been deleted.');
+            } catch {
+              showToast('Something went wrong. Please try again.');
+            } finally {
+              setIsDeleting(false);
+            }
           },
         },
       ],
@@ -115,11 +151,22 @@ export default function MoreScreen() {
         <View style={styles.row}>
           <Ionicons name="diamond-outline" size={20} color={Colors.text} />
           <Text style={styles.rowLabel}>Subscription</Text>
-          <Text style={styles.rowValue}>{selectedTier === 'free' ? 'Free' : selectedTier === 'pro' ? 'Pro' : 'Power'}</Text>
+          <Text style={styles.rowValue}>{isPro ? 'Pro' : 'Free'}</Text>
         </View>
+        {!isPro && (
+          <Pressable
+            style={styles.row}
+            onPress={() => router.push('/paywall')}
+            accessibilityLabel="Upgrade to Pro"
+            accessibilityRole="button">
+            <Ionicons name="arrow-up-circle-outline" size={20} color={Colors.primary} />
+            <Text style={[styles.rowLabel, { color: Colors.primary }]}>Upgrade to Pro</Text>
+            <Ionicons name="chevron-forward" size={16} color={Colors.primary} />
+          </Pressable>
+        )}
         <Pressable
           style={[styles.row, styles.rowLast]}
-          onPress={() => router.push('/paywall')}
+          onPress={showCustomerCenter}
           accessibilityLabel="Manage subscription"
           accessibilityRole="button">
           <Ionicons name="card-outline" size={20} color={Colors.text} />
@@ -192,11 +239,16 @@ export default function MoreScreen() {
         <Pressable
           style={[styles.row, styles.rowLast]}
           onPress={handleDeleteData}
+          disabled={isDeleting}
           accessibilityLabel="Delete my data"
           accessibilityRole="button">
-          <Ionicons name="trash-outline" size={20} color={Colors.error} />
+          {isDeleting ? (
+            <ActivityIndicator size={20} color={Colors.error} />
+          ) : (
+            <Ionicons name="trash-outline" size={20} color={Colors.error} />
+          )}
           <Text style={[styles.rowLabel, styles.dangerLabel]}>
-            Delete My Data
+            {isDeleting ? 'Deleting...' : 'Delete My Data'}
           </Text>
         </Pressable>
       </View>

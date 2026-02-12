@@ -14,6 +14,7 @@ interface Props {
   channelName: string;
   videoId: string;
   timestampStart: number;
+  onPlay?: (videoId: string, startSeconds: number, sectionTitle: string) => void;
 }
 
 export function SectionActions({
@@ -25,6 +26,7 @@ export function SectionActions({
   channelName,
   videoId,
   timestampStart,
+  onPlay,
 }: Props) {
   const showToast = useToast();
   const isBookmarked = useBookmarkStore((s) =>
@@ -62,8 +64,12 @@ export function SectionActions({
   };
 
   const handlePlay = () => {
-    const t = Math.floor(timestampStart);
-    Linking.openURL(`https://youtube.com/watch?v=${videoId}&t=${t}`);
+    if (onPlay) {
+      onPlay(videoId, timestampStart, sectionTitle);
+    } else {
+      const t = Math.floor(timestampStart);
+      Linking.openURL(`https://youtube.com/watch?v=${videoId}&t=${t}`);
+    }
   };
 
   return (
@@ -111,8 +117,8 @@ export function SectionActions({
         onPress={handlePlay}
         accessibilityLabel="Play from this timestamp"
         accessibilityRole="button">
-        <Ionicons name="play-outline" size={16} color={Colors.textSecondary} />
-        <Text style={styles.buttonText}>Play</Text>
+        <Ionicons name="play-circle-outline" size={16} color={Colors.textSecondary} />
+        <Text style={styles.buttonText}>Watch</Text>
       </Pressable>
     </View>
   );

@@ -19,7 +19,7 @@ import { useVideoPreview } from '@/src/hooks/useVideoPreview';
 import { useShareIntentUrl } from '@/src/hooks/useShareIntent';
 import { FullScreenLoader } from '@/src/components/summary/FullScreenLoader';
 import { useToast } from '@/src/components/ui/Toast';
-import { useSettingsStore } from '@/src/stores/settingsStore';
+import { useRevenueCat } from '@/src/providers/RevenueCatProvider';
 
 export default function AnalyseScreen() {
   const params = useLocalSearchParams<{ url?: string }>();
@@ -42,8 +42,7 @@ export default function AnalyseScreen() {
   }, []);
   useShareIntentUrl(handleSharedUrl);
 
-  // Gate free-tier users through paywall (skip if trial already started)
-  const { selectedTier, trialStarted } = useSettingsStore();
+  const { isPro } = useRevenueCat();
 
   const handleAnalyse = () => {
     const id = extractVideoId(url.trim());
@@ -52,7 +51,7 @@ export default function AnalyseScreen() {
       return;
     }
 
-    if (selectedTier === 'free' && !trialStarted) {
+    if (!isPro) {
       router.push('/paywall');
       return;
     }

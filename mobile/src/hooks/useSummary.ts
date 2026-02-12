@@ -18,6 +18,7 @@ import {
 } from '@/src/services/creatorService';
 import { importYouTubeSubscriptions } from '@/src/services/youtubeImportService';
 import { fetchFollowersCount } from '@/src/stores/userFollowStore';
+import { useOfflineStore } from '@/src/stores/offlineStore';
 
 export function useSummaries() {
   return useQuery({
@@ -30,7 +31,19 @@ export function useSummaries() {
 export function useSummary(id: string) {
   return useQuery({
     queryKey: ['summary', id],
-    queryFn: () => fetchSummary(id),
+    queryFn: async () => {
+      try {
+        const summary = await fetchSummary(id);
+        // Auto-cache for offline access
+        useOfflineStore.getState().cacheSummary(summary);
+        return summary;
+      } catch (err) {
+        // Fallback to offline cache
+        const cached = useOfflineStore.getState().getCachedSummary(id);
+        if (cached) return cached;
+        throw err;
+      }
+    },
     enabled: !!id,
     staleTime: 5 * 60_000,
   });

@@ -22,16 +22,14 @@ export const LANGUAGES = [
 export type LanguageCode = (typeof LANGUAGES)[number]['code'];
 
 export type Tier = 'free' | 'pro' | 'power';
-export type BillingCycle = 'monthly' | 'annual';
 
 interface SettingsState {
   language: LanguageCode;
   setLanguage: (lang: LanguageCode) => void;
-  trialStarted: boolean;
-  startTrial: () => void;
+  /** Current tier — driven by RevenueCat entitlements */
   selectedTier: Tier;
-  billingCycle: BillingCycle;
-  selectPlan: (tier: Tier, cycle: BillingCycle) => void;
+  /** Internal: called by RevenueCatProvider to sync entitlement state */
+  _setTier: (tier: Tier) => void;
   lastUserId: string | null;
   setLastUserId: (id: string) => void;
   clear: () => void;
@@ -42,19 +40,14 @@ export const useSettingsStore = create<SettingsState>()(
     (set) => ({
       language: 'en',
       setLanguage: (language) => set({ language }),
-      trialStarted: false,
-      startTrial: () => set({ trialStarted: true }),
       selectedTier: 'free' as Tier,
-      billingCycle: 'monthly' as BillingCycle,
-      selectPlan: (tier, cycle) => set({ selectedTier: tier, billingCycle: cycle }),
+      _setTier: (tier) => set({ selectedTier: tier }),
       lastUserId: null,
       setLastUserId: (id) => set({ lastUserId: id }),
       clear: () =>
         set({
           language: 'en',
-          trialStarted: false,
           selectedTier: 'free' as Tier,
-          billingCycle: 'monthly' as BillingCycle,
           lastUserId: null,
         }),
     }),
