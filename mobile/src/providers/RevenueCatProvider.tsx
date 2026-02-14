@@ -54,11 +54,19 @@ export function RevenueCatProvider({ children }: { children: React.ReactNode }) 
 
         const customerInfo = await Purchases.getCustomerInfo();
         const hasPro = customerInfo.entitlements.active[ENTITLEMENT_ID] !== undefined;
-        setIsPro(hasPro);
-        syncEntitlements(customerInfo);
+        // In dev mode, grant pro access so the paywall doesn't block testing
+        const effectivePro = __DEV__ ? true : hasPro;
+        setIsPro(effectivePro);
+        useSettingsStore.getState()._setTier(effectivePro ? 'pro' : 'free');
       } catch (error) {
         console.error('[RevenueCat] Init error:', error);
-        useSettingsStore.getState()._setTier('free');
+        // In dev mode, still grant access even on SDK failure
+        if (__DEV__) {
+          setIsPro(true);
+          useSettingsStore.getState()._setTier('pro');
+        } else {
+          useSettingsStore.getState()._setTier('free');
+        }
       } finally {
         setIsReady(true);
       }
