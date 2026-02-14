@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Redirect, Stack } from 'expo-router';
 import { Text, View } from 'react-native';
+
 import { useSession } from '@/src/providers/SessionProvider';
 import { RevenueCatProvider } from '@/src/providers/RevenueCatProvider';
 import { migrateLocalSummaries } from '@/src/services/summaryService';
 import { Toast } from '@/src/components/ui/Toast';
+import { SUMMARIZE } from '@/src/utils/locale';
 
 export default function AppLayout() {
   const { session, user, isLoading } = useSession();
@@ -44,7 +46,7 @@ export default function AppLayout() {
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen
             name="analyse"
-            options={{ title: 'Analyse', headerBackTitle: 'Back' }}
+            options={{ title: SUMMARIZE, headerBackTitle: 'Back' }}
           />
           <Stack.Screen
             name="summary/[id]"
@@ -79,7 +81,7 @@ export default function AppLayout() {
           />
           <Stack.Screen
             name="confirm-analyse"
-            options={{ title: 'Analyse Video', headerBackTitle: 'Back' }}
+            options={{ title: `${SUMMARIZE} Video`, headerBackTitle: 'Back' }}
           />
           <Stack.Screen
             name="personalise"

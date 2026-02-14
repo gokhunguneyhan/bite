@@ -12,6 +12,8 @@ interface MiniYouTubePlayerProps {
   startSeconds: number;
   sectionTitle: string;
   onClose: () => void;
+  /** When true, renders as a simple inline player with no header/minimize/close. */
+  embedded?: boolean;
 }
 
 export default function MiniYouTubePlayer({
@@ -19,9 +21,10 @@ export default function MiniYouTubePlayer({
   startSeconds,
   sectionTitle,
   onClose,
+  embedded,
 }: MiniYouTubePlayerProps) {
   const playerRef = useRef<YoutubeIframeRef>(null);
-  const [isPlaying, setIsPlaying] = useState(true);
+  const [isPlaying, setIsPlaying] = useState(!embedded);
   const [isMinimized, setIsMinimized] = useState(false);
 
   const onStateChange = useCallback((state: string) => {
@@ -33,6 +36,29 @@ export default function MiniYouTubePlayer({
   const togglePlay = useCallback(() => {
     setIsPlaying((prev) => !prev);
   }, []);
+
+  if (embedded) {
+    return (
+      <YoutubePlayer
+        ref={playerRef}
+        height={PLAYER_HEIGHT}
+        width={SCREEN_WIDTH}
+        play={isPlaying}
+        videoId={videoId}
+        initialPlayerParams={{
+          start: Math.floor(startSeconds),
+          modestbranding: true,
+          rel: false,
+          showClosedCaptions: false,
+        }}
+        onChangeState={onStateChange}
+        webViewProps={{
+          allowsInlineMediaPlayback: true,
+          mediaPlaybackRequiresUserAction: false,
+        }}
+      />
+    );
+  }
 
   if (isMinimized) {
     return (

@@ -17,7 +17,7 @@ export function useOnboardingStatus() {
   return useQuery({
     queryKey: ['onboarding-status'],
     queryFn: hasCompletedOnboarding,
-    staleTime: Infinity,
+    staleTime: 5 * 60_000,
   });
 }
 

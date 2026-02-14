@@ -139,3 +139,46 @@ export async function fetchCategoryVideos(
     )
     .slice(0, 10);
 }
+
+/**
+ * Fetch trending videos across all categories by picking one creator per
+ * category for diversity. Uses real YouTube RSS feeds — no API key needed.
+ * Returns at most 15 videos sorted newest-first.
+ */
+export async function fetchTrendingVideos(): Promise<YouTubeVideo[]> {
+  const seen = new Set<string>();
+  const selected: typeof FEATURED_CREATORS = [];
+
+  for (const creator of FEATURED_CREATORS) {
+    if (!seen.has(creator.category)) {
+      seen.add(creator.category);
+      selected.push(creator);
+    }
+    if (selected.length >= 8) break;
+  }
+
+  const results = await Promise.allSettled(
+    selected.map((c) => fetchChannelRssVideos(c.channelId, c.name)),
+  );
+
+  const allVideos: YouTubeVideo[] = [];
+  const seenIds = new Set<string>();
+
+  for (const result of results) {
+    if (result.status !== 'fulfilled') continue;
+    for (const video of result.value) {
+      if (!seenIds.has(video.videoId)) {
+        seenIds.add(video.videoId);
+        allVideos.push(video);
+      }
+    }
+  }
+
+  return allVideos
+    .sort(
+      (a, b) =>
+        new Date(b.publishedAt).getTime() -
+        new Date(a.publishedAt).getTime(),
+    )
+    .slice(0, 15);
+}

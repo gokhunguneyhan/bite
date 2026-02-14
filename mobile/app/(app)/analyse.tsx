@@ -20,6 +20,7 @@ import { useShareIntentUrl } from '@/src/hooks/useShareIntent';
 import { FullScreenLoader } from '@/src/components/summary/FullScreenLoader';
 import { useToast } from '@/src/components/ui/Toast';
 import { useRevenueCat } from '@/src/providers/RevenueCatProvider';
+import { SUMMARIZE } from '@/src/utils/locale';
 
 export default function AnalyseScreen() {
   const params = useLocalSearchParams<{ url?: string }>();
@@ -131,10 +132,10 @@ export default function AnalyseScreen() {
             style={[styles.button, !url.trim() && styles.buttonDisabled]}
             onPress={handleAnalyse}
             disabled={!url.trim()}
-            accessibilityLabel="Analyse video"
+            accessibilityLabel={`${SUMMARIZE} video`}
             accessibilityRole="button">
             <Ionicons name="sparkles-outline" size={20} color="#fff" />
-            <Text style={styles.buttonText}>Analyse</Text>
+            <Text style={styles.buttonText}>{SUMMARIZE}</Text>
           </Pressable>
 
           <Pressable

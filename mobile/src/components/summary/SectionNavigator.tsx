@@ -3,10 +3,11 @@ import { ScrollView, Text, Pressable, Animated, StyleSheet } from 'react-native'
 import { Colors } from '@/src/constants/colors';
 
 const PILLS = [
+  { key: 'intro', label: 'Intro' },
   { key: 'summary', label: 'Summary' },
-  { key: 'context', label: 'Context' },
   { key: 'insights', label: 'Insights' },
   { key: 'resources', label: 'Resources' },
+  { key: 'more', label: 'More' },
 ] as const;
 
 export type SectionKey = (typeof PILLS)[number]['key'];
@@ -14,22 +15,22 @@ export type SectionKey = (typeof PILLS)[number]['key'];
 interface Props {
   activeSection: SectionKey;
   onPress: (key: SectionKey) => void;
-  scrollDirection?: 'up' | 'down';
+  visible?: boolean;
 }
 
-export function SectionNavigator({ activeSection, onPress, scrollDirection = 'up' }: Props) {
+export function SectionNavigator({ activeSection, onPress, visible = true }: Props) {
   const translateY = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.timing(translateY, {
-      toValue: scrollDirection === 'down' ? -60 : 0,
+      toValue: visible ? 0 : -60,
       duration: 200,
       useNativeDriver: true,
     }).start();
-  }, [scrollDirection, translateY]);
+  }, [visible, translateY]);
 
   return (
-    <Animated.View style={{ transform: [{ translateY }] }}>
+    <Animated.View style={[styles.wrapper, { transform: [{ translateY }] }]}>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -55,6 +56,16 @@ export function SectionNavigator({ activeSection, onPress, scrollDirection = 'up
 }
 
 const styles = StyleSheet.create({
+  wrapper: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+    backgroundColor: Colors.background,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.border,
+  },
   container: {
     gap: 8,
     paddingHorizontal: 20,

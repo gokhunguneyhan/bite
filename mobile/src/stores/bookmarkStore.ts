@@ -48,7 +48,7 @@ export const useBookmarkStore = create<BookmarkState>()(
       clear: () => set({ bookmarks: [] }),
     }),
     {
-      name: '@yt_summarise_bookmarks',
+      name: '@bite_bookmarks',
       storage: createJSONStorage(() => AsyncStorage),
     },
   ),

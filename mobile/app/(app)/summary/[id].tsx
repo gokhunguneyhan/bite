@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   StyleSheet,
   Alert,
+
   Share,
   NativeSyntheticEvent,
   NativeScrollEvent,
@@ -30,18 +31,20 @@ import { useSession } from '@/src/providers/SessionProvider';
 import { useSettingsStore, LANGUAGES } from '@/src/stores/settingsStore';
 import { useLikeStore } from '@/src/stores/likeStore';
 import { useBookmarkStore } from '@/src/stores/bookmarkStore';
-import { ChannelInfoBlock } from '@/src/components/summary/ChannelInfoBlock';
 import { CommunityShareCallout } from '@/src/components/summary/CommunityShareCallout';
 import { SectionActions } from '@/src/components/summary/SectionActions';
 import { SectionNavigator } from '@/src/components/summary/SectionNavigator';
 import type { SectionKey } from '@/src/components/summary/SectionNavigator';
-import { VerticalVideoCard } from '@/src/components/summary/VerticalVideoCard';
+
 import { useToast } from '@/src/components/ui/Toast';
 import { useTTS } from '@/src/hooks/useTTS';
 import { useOfflineStore } from '@/src/stores/offlineStore';
 import { useRevenueCat } from '@/src/providers/RevenueCatProvider';
 import MiniYouTubePlayer, { PLAYER_HEIGHT } from '@/src/components/summary/MiniYouTubePlayer';
+import { useChannelInfo, useChannelVideos } from '@/src/hooks/useChannelInfo';
+import { SUMMARIZE } from '@/src/utils/locale';
 import type { Summary } from '@/src/types/summary';
+import type { YouTubeVideo } from '@/src/mocks/youtubeSubscriptions';
 
 function formatTimestamp(seconds: number): string {
   const h = Math.floor(seconds / 3600);
@@ -74,6 +77,22 @@ function getResourceIcon(type: string): keyof typeof Ionicons.glyphMap {
   return RESOURCE_ICONS[type] || 'link';
 }
 
+type MoreItem =
+  | { type: 'summary'; data: Summary }
+  | { type: 'video'; data: YouTubeVideo };
+
+function getRelativeTime(dateString: string): string {
+  const now = Date.now();
+  const then = new Date(dateString).getTime();
+  const diffMs = now - then;
+  const diffDays = Math.floor(diffMs / 86400000);
+  if (diffDays < 1) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays < 7) return `${diffDays} days ago`;
+  if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
+  return new Date(dateString).toLocaleDateString();
+}
+
 export default function SummaryScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { data: summary, isLoading, error } = useSummary(id);
@@ -83,7 +102,7 @@ export default function SummaryScreen() {
   const translateMutation = useTranslateSummary();
   const togglePublishMutation = useTogglePublish();
   const [showOriginal, setShowOriginal] = useState(false);
-  const [activeSection, setActiveSection] = useState<SectionKey>('summary');
+  const [activeSection, setActiveSection] = useState<SectionKey>('intro');
   // isAnonymous is local state for now -- TODO: persist to Supabase
   const [isAnonymous, setIsAnonymous] = useState(false);
 
@@ -96,6 +115,10 @@ export default function SummaryScreen() {
 
   const { isPro } = useRevenueCat();
   const showToast = useToast();
+
+  // Channel info (avatar, channelId) & more videos
+  const { data: channelInfo } = useChannelInfo(summary?.channelName);
+  const { data: channelVideos } = useChannelVideos(channelInfo?.channelId);
 
   // Offline
   const isOfflineCached = useOfflineStore((s) => s.isCached(id));
@@ -112,9 +135,11 @@ export default function SummaryScreen() {
   const scrollRef = useRef<ScrollView>(null);
   const sectionOffsets = useRef<Record<string, number>>({});
 
-  // Scroll direction tracking
-  const [scrollDirection, setScrollDirection] = useState<'up' | 'down'>('up');
+  // Scroll direction tracking — show nav after scrolling up ~15% of viewport
+  const [showSectionNav, setShowSectionNav] = useState(true);
   const lastScrollY = useRef(0);
+  const scrollDirectionAnchor = useRef(0);
+  const wasScrollingDown = useRef(false);
 
   const channelForSub = summary?.channelName ?? '';
   const { data: subscribed } = useIsSubscribed(channelForSub);
@@ -225,18 +250,37 @@ export default function SummaryScreen() {
     }
   };
 
-  // Similar summaries in same category
+  // Similar summaries — same category or same channel
   const similarSummaries = useMemo(() => {
     if (!summary || !communitySummaries) return [];
     return communitySummaries
       .filter(
         (s) =>
           s.id !== summary.id &&
-          s.category &&
-          s.category === summary.category,
+          (s.category === summary.category || s.channelName === summary.channelName),
       )
-      .slice(0, 5);
+      .slice(0, 8);
   }, [summary, communitySummaries]);
+
+  // Unified "More like this" items — interleave summaries + channel videos
+  const moreItems = useMemo((): MoreItem[] => {
+    if (!summary) return [];
+    const sums: MoreItem[] = similarSummaries.map((s) => ({ type: 'summary', data: s }));
+    const summarisedIds = new Set(similarSummaries.map((s) => s.videoId));
+    const vids: MoreItem[] = (channelVideos ?? [])
+      .filter((v) => v.videoId !== summary.videoId && !summarisedIds.has(v.videoId))
+      .slice(0, 6)
+      .map((v) => ({ type: 'video', data: v }));
+    // Interleave
+    const items: MoreItem[] = [];
+    let si = 0;
+    let vi = 0;
+    while (si < sums.length || vi < vids.length) {
+      if (si < sums.length) items.push(sums[si++]);
+      if (vi < vids.length) items.push(vids[vi++]);
+    }
+    return items;
+  }, [summary, similarSummaries, channelVideos]);
 
   const handleSectionLayout = useCallback(
     (key: string) => (e: LayoutChangeEvent) => {
@@ -256,11 +300,45 @@ export default function SummaryScreen() {
   const handleScroll = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       const currentY = e.nativeEvent.contentOffset.y;
-      if (currentY > lastScrollY.current + 5) {
-        setScrollDirection('down');
-      } else if (currentY < lastScrollY.current - 5) {
-        setScrollDirection('up');
+      const viewportHeight = e.nativeEvent.layoutMeasurement.height;
+      const threshold = viewportHeight * 0.10;
+      const delta = currentY - lastScrollY.current;
+
+      if (delta > 8) {
+        // Scrolling down
+        if (!wasScrollingDown.current) {
+          wasScrollingDown.current = true;
+          scrollDirectionAnchor.current = currentY;
+        }
+        setShowSectionNav(false);
+      } else if (delta < -8) {
+        // Scrolling up
+        if (wasScrollingDown.current) {
+          wasScrollingDown.current = false;
+          scrollDirectionAnchor.current = currentY;
+        }
+        if (scrollDirectionAnchor.current - currentY > threshold) {
+          setShowSectionNav(true);
+        }
       }
+
+      // At the top, always show
+      if (currentY <= 10) {
+        setShowSectionNav(true);
+      }
+
+      // Update active section based on scroll position
+      const offsets = sectionOffsets.current;
+      const scrollY = currentY + 100; // offset for header + nav height
+      const keys: SectionKey[] = ['intro', 'summary', 'insights', 'resources', 'more'];
+      let active: SectionKey = 'intro';
+      for (const key of keys) {
+        if (offsets[key] != null && scrollY >= offsets[key]) {
+          active = key;
+        }
+      }
+      setActiveSection(active);
+
       lastScrollY.current = currentY;
     },
     [],
@@ -297,15 +375,20 @@ export default function SummaryScreen() {
     <View style={styles.container}>
     <ScrollView
       style={styles.container}
+      contentContainerStyle={styles.scrollContent}
       ref={scrollRef}
       onScroll={handleScroll}
       scrollEventThrottle={16}>
-      {/* Thumbnail */}
-      <Image
-        source={{ uri: summary.thumbnailUrl }}
-        style={styles.thumbnail}
-        contentFit="cover"
-      />
+      {/* Video Player */}
+      <View style={styles.videoPlayerContainer}>
+        <MiniYouTubePlayer
+          videoId={summary.videoId}
+          startSeconds={0}
+          sectionTitle={summary.videoTitle}
+          onClose={() => {}}
+          embedded
+        />
+      </View>
 
       {/* Video meta */}
       <View style={styles.videoMeta}>
@@ -342,112 +425,36 @@ export default function SummaryScreen() {
         )}
       </View>
 
-      {/* Action CTAs Row */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.actionCtasContainer}
-        style={styles.actionCtasScroll}>
-        {needsTranslation && !isCheckingCache && !translationAvailable && (
-          <Pressable
-            style={[
-              styles.actionPill,
-              translateMutation.isPending && styles.actionPillDisabled,
-            ]}
-            onPress={handleTranslate}
-            disabled={translateMutation.isPending}>
-            {translateMutation.isPending ? (
-              <ActivityIndicator color={Colors.primary} size={12} />
-            ) : (
-              <Ionicons name="language-outline" size={16} color={Colors.primary} />
-            )}
-            <Text style={styles.actionPillText}>Translate</Text>
-          </Pressable>
-        )}
-        {needsTranslation && !isCheckingCache && translationAvailable && (
-          <Pressable
-            style={styles.actionPill}
-            onPress={() => setShowOriginal(!showOriginal)}>
-            <Ionicons name="swap-horizontal-outline" size={16} color={Colors.primary} />
-            <Text style={styles.actionPillText}>
-              {showOriginal ? langLabel : 'Original'}
+      {/* Creator card — above the player */}
+      <Pressable
+        style={styles.creatorCard}
+        onPress={() => router.push({ pathname: '/creator/[id]', params: { id: summary.channelName } })}>
+        {channelInfo?.avatarUrl ? (
+          <Image source={{ uri: channelInfo.avatarUrl }} style={styles.creatorAvatar} />
+        ) : (
+          <View style={[styles.creatorAvatar, styles.creatorAvatarFallback]}>
+            <Text style={styles.creatorAvatarText}>
+              {summary.channelName?.charAt(0)?.toUpperCase() ?? 'C'}
             </Text>
-          </Pressable>
+          </View>
         )}
+        <Text style={styles.creatorName} numberOfLines={1}>
+          {summary.channelName}
+        </Text>
         <Pressable
-          style={[styles.actionPill, tts.status === 'playing' && styles.actionPillActive]}
-          onPress={tts.toggle}
-          disabled={tts.isLoading}>
-          {tts.isLoading ? (
-            <ActivityIndicator color={Colors.primary} size={14} />
-          ) : (
-            <Ionicons
-              name={tts.status === 'playing' ? 'pause' : 'headset-outline'}
-              size={16}
-              color={tts.status !== 'idle' ? Colors.primary : Colors.textSecondary}
-            />
-          )}
-          <Text style={[styles.actionPillText, tts.status !== 'idle' && { color: Colors.primary }]}>
-            {tts.isLoading ? 'Loading...' : tts.status === 'playing' ? 'Pause' : tts.status === 'paused' ? 'Resume' : 'Listen'}
-          </Text>
-          {tts.status === 'playing' && (
-            <Pressable onPress={tts.stop} hitSlop={8}>
-              <Ionicons name="stop" size={14} color={Colors.primary} />
-            </Pressable>
-          )}
-          {!isPro && tts.status === 'idle' && (
-            <View style={styles.proBadge}>
-              <Text style={styles.proBadgeText}>PRO</Text>
-            </View>
-          )}
-        </Pressable>
-        <Pressable
-          style={styles.actionPill}
-          onPress={() => toggleLike(id)}>
+          style={[styles.creatorBtn, isFollowing && styles.creatorBtnActive]}
+          onPress={(e) => { e.stopPropagation(); handleToggleFollow(); }}
+          disabled={isSubMutating}>
           <Ionicons
-            name={isLiked ? 'heart' : 'heart-outline'}
-            size={16}
-            color={isLiked ? Colors.error : Colors.textSecondary}
+            name={isFollowing ? 'checkmark' : 'sparkles-outline'}
+            size={14}
+            color={isFollowing ? '#fff' : Colors.primary}
           />
-          <Text style={[styles.actionPillText, isLiked && { color: Colors.error }]}>
-            Like
+          <Text style={[styles.creatorBtnText, isFollowing && styles.creatorBtnTextActive]}>
+            {isFollowing ? 'Following' : 'Follow'}
           </Text>
         </Pressable>
-        <Pressable
-          style={styles.actionPill}
-          onPress={handleSave}>
-          <Ionicons
-            name={isSaved ? 'bookmark' : 'bookmark-outline'}
-            size={16}
-            color={isSaved ? Colors.primary : Colors.textSecondary}
-          />
-          <Text style={[styles.actionPillText, isSaved && { color: Colors.primary }]}>
-            Save
-          </Text>
-        </Pressable>
-        <Pressable
-          style={styles.actionPill}
-          onPress={handleSummaryShare}>
-          <Ionicons name="arrow-redo-outline" size={16} color={Colors.textSecondary} />
-          <Text style={styles.actionPillText}>Share</Text>
-        </Pressable>
-        <Pressable
-          style={styles.actionPill}
-          onPress={handleReport}>
-          <Ionicons name="flag-outline" size={16} color={Colors.textSecondary} />
-          <Text style={styles.actionPillText}>Report</Text>
-        </Pressable>
-      </ScrollView>
-
-      {/* Channel Info Block */}
-      <View style={styles.blockSection}>
-        <ChannelInfoBlock
-          channelName={summary.channelName}
-          isFollowing={isFollowing}
-          isMutating={isSubMutating}
-          onToggleFollow={handleToggleFollow}
-        />
-      </View>
+      </Pressable>
 
       {/* Community Share Callout */}
       <View style={styles.blockSection}>
@@ -467,33 +474,28 @@ export default function SummaryScreen() {
         )}
       </View>
 
-      {/* Section Navigator */}
-      <SectionNavigator
-        activeSection={activeSection}
-        onPress={scrollToSection}
-        scrollDirection={scrollDirection}
-      />
+      {/* Spacer for sticky section navigator */}
 
-      {/* Quick Summary */}
+      {/* Intro */}
       <View
         style={styles.section}
-        onLayout={handleSectionLayout('summary')}>
+        onLayout={handleSectionLayout('intro')}>
         <View style={styles.sectionHeader}>
           <Ionicons name="flash-outline" size={18} color={Colors.primary} />
-          <Text style={styles.sectionTitle}>Quick Summary</Text>
+          <Text style={styles.sectionTitle}>Intro</Text>
         </View>
         <Text style={styles.quickSummaryText}>
           {displaySummary.quickSummary}
         </Text>
       </View>
 
-      {/* Contextual Summary */}
+      {/* Summary */}
       <View
         style={styles.section}
-        onLayout={handleSectionLayout('context')}>
+        onLayout={handleSectionLayout('summary')}>
         <View style={styles.sectionHeader}>
           <Ionicons name="book-outline" size={18} color={Colors.primary} />
-          <Text style={styles.sectionTitle}>Contextual Summary</Text>
+          <Text style={styles.sectionTitle}>Summary</Text>
           <Text style={styles.badge}>
             {getReadingTime(displaySummary.contextualSections)}
           </Text>
@@ -654,83 +656,243 @@ export default function SummaryScreen() {
         </View>
       )}
 
-      {/* You might also like */}
-      {similarSummaries.length > 0 && (
-        <View style={styles.section}>
-          <Text style={styles.similarTitle}>You might also like</Text>
+      {/* Creator card (bottom) */}
+      <Pressable
+        style={[styles.creatorCard, { marginTop: 24 }]}
+        onPress={() => router.push({ pathname: '/creator/[id]', params: { id: summary.channelName } })}>
+        {channelInfo?.avatarUrl ? (
+          <Image source={{ uri: channelInfo.avatarUrl }} style={styles.creatorAvatar} />
+        ) : (
+          <View style={[styles.creatorAvatar, styles.creatorAvatarFallback]}>
+            <Text style={styles.creatorAvatarText}>
+              {summary.channelName?.charAt(0)?.toUpperCase() ?? 'C'}
+            </Text>
+          </View>
+        )}
+        <Text style={styles.creatorName} numberOfLines={1}>
+          {summary.channelName}
+        </Text>
+        <Pressable
+          style={[styles.creatorBtn, isFollowing && styles.creatorBtnActive]}
+          onPress={(e) => { e.stopPropagation(); handleToggleFollow(); }}
+          disabled={isSubMutating}>
+          <Ionicons
+            name={isFollowing ? 'checkmark' : 'sparkles-outline'}
+            size={14}
+            color={isFollowing ? '#fff' : Colors.primary}
+          />
+          <Text style={[styles.creatorBtnText, isFollowing && styles.creatorBtnTextActive]}>
+            {isFollowing ? 'Following' : 'Follow'}
+          </Text>
+        </Pressable>
+      </Pressable>
+
+      {/* More like this — single mixed carousel */}
+      <View
+        style={styles.section}
+        onLayout={handleSectionLayout('more')}>
+        <View style={styles.sectionHeader}>
+          <Ionicons name="grid-outline" size={18} color={Colors.primary} />
+          <Text style={styles.sectionTitle}>More from {summary.channelName}</Text>
+        </View>
+
+        {moreItems.length > 0 ? (
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             style={styles.similarScroll}
             contentContainerStyle={styles.similarContent}>
-            {similarSummaries.map((s) => (
-              <View key={s.id} style={styles.similarCard}>
-                <VerticalVideoCard summary={s} />
-              </View>
-            ))}
+            {moreItems.map((item) => {
+              if (item.type === 'summary') {
+                const s = item.data as Summary;
+                return (
+                  <Pressable
+                    key={`s-${s.id}`}
+                    style={styles.moreCard}
+                    onPress={() => router.push(`/summary/${s.id}`)}>
+                    <Image
+                      source={{ uri: s.thumbnailUrl }}
+                      style={styles.moreCardThumb}
+                      contentFit="cover"
+                    />
+                    <View style={styles.moreCardInfo}>
+                      <Text style={styles.moreCardTitle} numberOfLines={2}>
+                        {s.videoTitle}
+                      </Text>
+                      <Text style={styles.moreCardMeta} numberOfLines={1}>
+                        {s.channelName} · {getRelativeTime(s.createdAt)}
+                      </Text>
+                      {s.category && s.category !== 'Other' && (
+                        <View style={styles.moreCardChip}>
+                          <Text style={styles.moreCardChipText}>{s.category}</Text>
+                        </View>
+                      )}
+                    </View>
+                  </Pressable>
+                );
+              }
+              const v = item.data as YouTubeVideo;
+              return (
+                <Pressable
+                  key={`v-${v.videoId}`}
+                  style={styles.moreCard}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/confirm-analyse',
+                      params: {
+                        videoId: v.videoId,
+                        title: v.title,
+                        channelName: v.channelName,
+                        thumbnailUrl: v.thumbnailUrl,
+                        durationLabel: v.durationLabel ?? '',
+                      },
+                    })
+                  }>
+                  <View>
+                    <Image
+                      source={{ uri: v.thumbnailUrl }}
+                      style={styles.moreCardThumb}
+                      contentFit="cover"
+                    />
+                    {v.durationLabel ? (
+                      <View style={styles.moreCardDuration}>
+                        <Text style={styles.moreCardDurationText}>{v.durationLabel}</Text>
+                      </View>
+                    ) : null}
+                  </View>
+                  <View style={styles.moreCardInfo}>
+                    <Text style={styles.moreCardTitle} numberOfLines={2}>
+                      {v.title}
+                    </Text>
+                    <Text style={styles.moreCardMeta} numberOfLines={1}>
+                      {v.channelName} · {getRelativeTime(v.publishedAt)}
+                    </Text>
+                    <View style={styles.moreCardTag}>
+                      <Ionicons name="sparkles-outline" size={13} color={Colors.primary} />
+                      <Text style={styles.moreCardTagText}>{SUMMARIZE}</Text>
+                    </View>
+                  </View>
+                </Pressable>
+              );
+            })}
           </ScrollView>
-        </View>
-      )}
+        ) : (
+          <View style={styles.moreEmpty}>
+            <Ionicons name="videocam-outline" size={32} color={Colors.border} />
+            <Text style={styles.moreEmptyText}>More summaries coming soon</Text>
+          </View>
+        )}
+      </View>
 
-      {/* Bottom Action Buttons */}
+      <View style={{ height: inlinePlayer ? PLAYER_HEIGHT + 120 : 100 }} />
+    </ScrollView>
+
+    {/* Sticky section navigator */}
+    <SectionNavigator
+      activeSection={activeSection}
+      onPress={scrollToSection}
+      visible={showSectionNav}
+    />
+
+    {/* Sticky bottom action bar */}
+    <View style={styles.bottomBar}>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.actionCtasContainer}
-        style={styles.bottomActionsScroll}>
-        <Pressable
-          style={styles.actionPill}
-          onPress={() => toggleLike(id)}>
+        contentContainerStyle={styles.bottomBarContent}>
+        {/* Translate — first if different language */}
+        {needsTranslation && !isCheckingCache && !translationAvailable && (
+          <Pressable
+            style={[styles.actionPill, translateMutation.isPending && styles.actionPillDisabled]}
+            onPress={handleTranslate}
+            disabled={translateMutation.isPending}>
+            {translateMutation.isPending ? (
+              <ActivityIndicator color={Colors.textSecondary} size={12} />
+            ) : (
+              <Ionicons name="language-outline" size={16} color={Colors.textSecondary} />
+            )}
+            <Text style={styles.actionPillText}>Translate</Text>
+          </Pressable>
+        )}
+        {needsTranslation && !isCheckingCache && translationAvailable && (
+          <Pressable style={styles.actionPill} onPress={() => setShowOriginal(!showOriginal)}>
+            <Ionicons name="swap-horizontal-outline" size={16} color={Colors.textSecondary} />
+            <Text style={styles.actionPillText}>{showOriginal ? langLabel : 'Original'}</Text>
+          </Pressable>
+        )}
+        <Pressable style={styles.actionPill} onPress={() => toggleLike(id)}>
           <Ionicons
             name={isLiked ? 'heart' : 'heart-outline'}
             size={16}
             color={isLiked ? Colors.error : Colors.textSecondary}
           />
-          <Text style={[styles.actionPillText, isLiked && { color: Colors.error }]}>
-            Like
-          </Text>
+          <Text style={[styles.actionPillText, isLiked && { color: Colors.error }]}>Like</Text>
         </Pressable>
-        <Pressable
-          style={styles.actionPill}
-          onPress={handleSave}>
+        <Pressable style={styles.actionPill} onPress={handleSave}>
           <Ionicons
             name={isSaved ? 'bookmark' : 'bookmark-outline'}
             size={16}
             color={isSaved ? Colors.primary : Colors.textSecondary}
           />
-          <Text style={[styles.actionPillText, isSaved && { color: Colors.primary }]}>
-            Save
-          </Text>
+          <Text style={[styles.actionPillText, isSaved && { color: Colors.primary }]}>Save</Text>
         </Pressable>
         <Pressable
-          style={styles.actionPill}
-          onPress={handleSummaryShare}>
+          style={[styles.actionPill, tts.status === 'playing' && styles.actionPillActive]}
+          onPress={tts.toggle}
+          disabled={tts.isLoading}>
+          {tts.isLoading ? (
+            <ActivityIndicator color={Colors.primary} size={14} />
+          ) : (
+            <Ionicons
+              name={tts.status === 'playing' ? 'pause' : 'headset-outline'}
+              size={16}
+              color={tts.status !== 'idle' ? Colors.primary : Colors.textSecondary}
+            />
+          )}
+          <Text style={[styles.actionPillText, tts.status !== 'idle' && { color: Colors.primary }]}>
+            {tts.isLoading ? 'Loading...' : tts.status === 'playing' ? 'Pause' : tts.status === 'paused' ? 'Resume' : 'Listen'}
+          </Text>
+          {tts.status === 'playing' && (
+            <Pressable onPress={tts.stop} hitSlop={8}>
+              <Ionicons name="stop" size={14} color={Colors.primary} />
+            </Pressable>
+          )}
+          {!isPro && tts.status === 'idle' && (
+            <View style={styles.proBadge}>
+              <Text style={styles.proBadgeText}>PRO</Text>
+            </View>
+          )}
+        </Pressable>
+        <Pressable style={styles.actionPill} onPress={handleSummaryShare}>
           <Ionicons name="arrow-redo-outline" size={16} color={Colors.textSecondary} />
           <Text style={styles.actionPillText}>Share</Text>
         </Pressable>
-        <Pressable
-          style={styles.actionPill}
-          onPress={handleReport}>
+        <Pressable style={styles.actionPill} onPress={handleReport}>
           <Ionicons name="flag-outline" size={16} color={Colors.textSecondary} />
           <Text style={styles.actionPillText}>Report</Text>
         </Pressable>
-        <Pressable
-          style={styles.actionPill}
-          onPress={handleToggleFollow}
-          disabled={isSubMutating}>
-          <Ionicons
-            name={isFollowing ? 'checkmark-circle' : 'add-circle-outline'}
-            size={16}
-            color={isFollowing ? Colors.primary : Colors.textSecondary}
-          />
-          <Text style={[styles.actionPillText, isFollowing && { color: Colors.primary }]}>
-            {isFollowing ? 'Following' : 'Follow Channel'}
-          </Text>
-        </Pressable>
-      </ScrollView>
-
-      <View style={{ height: inlinePlayer ? PLAYER_HEIGHT + 80 : 60 }} />
-    </ScrollView>
+        {/* Translate — at end when same language */}
+        {!needsTranslation && !translationAvailable && (
+          <Pressable
+            style={[styles.actionPill, translateMutation.isPending && styles.actionPillDisabled]}
+            onPress={handleTranslate}
+            disabled={translateMutation.isPending}>
+            {translateMutation.isPending ? (
+              <ActivityIndicator color={Colors.textSecondary} size={12} />
+            ) : (
+              <Ionicons name="language-outline" size={16} color={Colors.textSecondary} />
+            )}
+            <Text style={styles.actionPillText}>Translate</Text>
+          </Pressable>
+        )}
+        {!needsTranslation && translationAvailable && (
+          <Pressable style={styles.actionPill} onPress={() => setShowOriginal(!showOriginal)}>
+            <Ionicons name="swap-horizontal-outline" size={16} color={Colors.textSecondary} />
+            <Text style={styles.actionPillText}>{showOriginal ? langLabel : 'Original'}</Text>
+          </Pressable>
+        )}
+        </ScrollView>
+    </View>
 
     {inlinePlayer && (
       <MiniYouTubePlayer
@@ -749,6 +911,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
+  scrollContent: {
+    paddingTop: 46,
+  },
   centered: {
     flex: 1,
     justifyContent: 'center',
@@ -764,10 +929,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: Colors.primary,
   },
-  thumbnail: {
+  videoPlayerContainer: {
     width: '100%',
-    height: 220,
-    backgroundColor: Colors.border,
+    aspectRatio: 16 / 9,
+    backgroundColor: '#000',
   },
   videoMeta: {
     padding: 20,
@@ -847,13 +1012,94 @@ const styles = StyleSheet.create({
     color: Colors.primary,
     fontWeight: '500',
   },
-  /* Action CTAs row */
-  actionCtasScroll: {
-    marginTop: 4,
+  /* Sticky bottom action bar */
+  bottomBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: Colors.background,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Colors.border,
+    paddingBottom: 20,
   },
-  actionCtasContainer: {
-    paddingHorizontal: 20,
+  bottomBarContent: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     gap: 8,
+  },
+  moreCard: {
+    width: 240,
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  moreCardThumb: {
+    width: '100%',
+    height: 135,
+    backgroundColor: Colors.border,
+  },
+  moreCardDuration: {
+    position: 'absolute',
+    bottom: 6,
+    right: 6,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  moreCardDurationText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  moreCardInfo: {
+    padding: 10,
+    gap: 4,
+  },
+  moreCardTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.text,
+    lineHeight: 19,
+  },
+  moreCardMeta: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+  },
+  moreCardChip: {
+    alignSelf: 'flex-start',
+    backgroundColor: Colors.primary + '15',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    marginTop: 2,
+  },
+  moreCardChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.primary,
+  },
+  moreCardTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
+  },
+  moreCardTagText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.primary,
+  },
+  moreEmpty: {
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 24,
+  },
+  moreEmptyText: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    textAlign: 'center',
   },
   actionPill: {
     flexDirection: 'row',
@@ -1057,11 +1303,60 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     marginTop: 4,
   },
-  similarTitle: {
-    fontSize: 18,
+  creatorCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: Colors.surface,
+    marginHorizontal: 20,
+    marginTop: 12,
+    borderRadius: 12,
+  },
+  creatorAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+  },
+  creatorAvatarFallback: {
+    backgroundColor: Colors.primary + '20',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  creatorAvatarText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.primary,
+  },
+  creatorName: {
+    flex: 1,
+    fontSize: 14,
     fontWeight: '600',
     color: Colors.text,
-    marginBottom: 12,
+  },
+  creatorBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: Colors.background,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  creatorBtnActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  creatorBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.text,
+  },
+  creatorBtnTextActive: {
+    color: '#fff',
   },
   similarScroll: {
     marginHorizontal: -20,
@@ -1069,12 +1364,5 @@ const styles = StyleSheet.create({
   similarContent: {
     paddingHorizontal: 20,
     gap: 12,
-  },
-  similarCard: {
-    width: 200,
-  },
-  bottomActionsScroll: {
-    marginTop: 20,
-    marginBottom: 4,
   },
 });

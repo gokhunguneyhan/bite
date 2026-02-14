@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { fetchCategoryVideos } from '../services/youtubeRssService';
+import { fetchCategoryVideos, fetchTrendingVideos } from '../services/youtubeRssService';
 import { FEATURED_CREATORS, type FeaturedCreator } from '../constants/featuredCreators';
 
 /**
@@ -11,6 +11,17 @@ export function useCategoryVideos(category: string | null) {
     queryKey: ['category-videos', category],
     queryFn: () => fetchCategoryVideos(category!),
     enabled: !!category && category !== 'All' && category !== 'Trending',
+    staleTime: 30 * 60 * 1000, // 30 minutes
+  });
+}
+
+/**
+ * Fetch trending videos from top creators across all categories via RSS.
+ */
+export function useTrendingVideos() {
+  return useQuery({
+    queryKey: ['trending-videos'],
+    queryFn: fetchTrendingVideos,
     staleTime: 30 * 60 * 1000, // 30 minutes
   });
 }

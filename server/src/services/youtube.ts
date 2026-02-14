@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { transcribeWithWhisper, type WhisperResult } from './whisper.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -108,5 +109,34 @@ except Exception as e:
     }
 
     throw new Error(`[NO_CAPTIONS] No transcript available: ${msg || 'unknown error'}`);
+  }
+}
+
+/**
+ * Task 2: Get transcript with smart fallback
+ *
+ * Strategy:
+ * 1. Try YouTube API first (instant, free, works for 80% of videos)
+ * 2. Fall back to Whisper if no captions (slower but handles all videos)
+ *
+ * @param videoId YouTube video ID
+ * @returns Transcript with timestamps
+ */
+export async function getTranscriptWithFallback(videoId: string): Promise<TranscriptResult> {
+  try {
+    // Try YouTube API first (instant, free)
+    console.log(`[transcript] Attempting YouTube captions for ${videoId}`);
+    return await fetchTranscript(videoId);
+  } catch (error: any) {
+    const msg = error.message || '';
+
+    // If no captions, fall back to Whisper
+    if (msg.includes('[NO_CAPTIONS]')) {
+      console.log(`[transcript] No YT captions, falling back to Whisper for ${videoId}`);
+      return await transcribeWithWhisper(videoId);
+    }
+
+    // Other errors (rate limit, video unavailable) should bubble up
+    throw error;
   }
 }

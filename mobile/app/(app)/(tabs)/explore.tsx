@@ -24,11 +24,41 @@ import {
 import { usePreferences } from '@/src/hooks/usePreferences';
 import { useCategoryVideos, getCategoryCreators } from '@/src/hooks/useCategoryVideos';
 import { FEATURED_CREATORS } from '@/src/constants/featuredCreators';
+import { useChannelInfo } from '@/src/hooks/useChannelInfo';
 import { CATEGORIES } from '@/src/types/summary';
 import { VerticalVideoCard } from '@/src/components/summary/VerticalVideoCard';
 import type { Summary } from '@/src/types/summary';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
+
+function ChannelAvatar({ name, size = 48 }: { name: string; size?: number }) {
+  const { data } = useChannelInfo(name);
+  const radius = size / 2;
+  if (data?.avatarUrl) {
+    return (
+      <Image
+        source={{ uri: data.avatarUrl }}
+        style={{ width: size, height: size, borderRadius: radius, marginBottom: 2 }}
+      />
+    );
+  }
+  return (
+    <View
+      style={{
+        width: size,
+        height: size,
+        borderRadius: radius,
+        backgroundColor: Colors.primary + '15',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 2,
+      }}>
+      <Text style={{ fontSize: size * 0.4, fontWeight: '700', color: Colors.primary }}>
+        {name.charAt(0).toUpperCase()}
+      </Text>
+    </View>
+  );
+}
 
 const CATEGORY_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   'Technology & AI': 'hardware-chip-outline',
@@ -261,11 +291,7 @@ export default function ExploreScreen() {
                           params: { id: ch },
                         })
                       }>
-                      <View style={styles.channelChipAvatar}>
-                        <Text style={styles.channelChipInitial}>
-                          {ch.charAt(0).toUpperCase()}
-                        </Text>
-                      </View>
+                      <ChannelAvatar name={ch} size={48} />
                       <Text style={styles.channelChipName} numberOfLines={1}>
                         {ch}
                       </Text>
@@ -348,11 +374,7 @@ export default function ExploreScreen() {
                             params: { id: creator.name },
                           })
                         }>
-                        <View style={styles.channelCarouselAvatar}>
-                          <Text style={styles.channelCarouselInitial}>
-                            {creator.name.charAt(0)}
-                          </Text>
-                        </View>
+                        <ChannelAvatar name={creator.name} size={48} />
                         <Text style={styles.channelCarouselName} numberOfLines={1}>
                           {creator.name}
                         </Text>

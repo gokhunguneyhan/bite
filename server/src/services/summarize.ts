@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import https from 'https';
+import { supabase } from '../lib/supabase.js';
 
 const keepAliveAgent = new https.Agent({
   keepAlive: true,
@@ -157,6 +158,86 @@ Return a JSON object with this exact structure (raw JSON only, no markdown):
 ☐ JSON keys match schema exactly
 
 Write in the same language as the transcript.`;
+
+/**
+ * Get cached summary or generate new one.
+ * Implements Task 1: Result Caching for 60-80% cost reduction.
+ *
+ * Cache hit: Returns stored summary (cost: $0, time: <50ms)
+ * Cache miss: Generates new summary and stores it (cost: $0.50, time: 30-120s)
+ */
+export async function getCachedSummary(
+  videoId: string,
+  transcript: string,
+  videoTitle: string,
+  channelName: string,
+  durationSeconds: number,
+  timeoutMs?: number,
+): Promise<SummaryResult> {
+  // Check cache first
+  if (supabase) {
+    try {
+      const { data: cached, error } = await supabase
+        .from('summary_cache')
+        .select('summary_data, created_at')
+        .eq('video_id', videoId)
+        .single();
+
+      if (cached && !error) {
+        // Cache hit - increment counter and return
+        console.log(
+          `[cache-hit] Returning cached summary for ${videoId}, created ${cached.created_at}`,
+        );
+
+        // Async increment (fire and forget)
+        (async () => {
+          try {
+            await supabase.rpc('increment_video_requests', { vid: videoId });
+            console.log(`[cache] Incremented request count for ${videoId}`);
+          } catch (err: any) {
+            console.error(`[cache] Failed to increment counter: ${err?.message || 'unknown error'}`);
+          }
+        })();
+
+        return cached.summary_data as SummaryResult;
+      }
+    } catch (err) {
+      console.error(`[cache] Cache lookup failed: ${err instanceof Error ? err.message : 'unknown error'}`);
+      // Fall through to generate new summary
+    }
+  }
+
+  // Cache miss - generate new summary
+  console.log(`[cache-miss] Generating new summary for ${videoId}`);
+  const summary = await generateSummary(transcript, videoTitle, timeoutMs);
+
+  // Store in cache (async, don't wait)
+  if (supabase) {
+    try {
+      const { error: insertError } = await supabase.from('summary_cache').insert({
+        video_id: videoId,
+        video_title: videoTitle,
+        channel_name: channelName,
+        duration_seconds: durationSeconds,
+        summary_data: summary,
+        request_count: 1,
+      });
+
+      if (insertError) {
+        console.error(`[cache] Failed to store summary: ${insertError.message}`);
+        // Don't fail the request, just log the error
+      } else {
+        console.log(`[cache] Stored summary for ${videoId} in cache`);
+      }
+    } catch (err) {
+      console.error(
+        `[cache] Cache store exception: ${err instanceof Error ? err.message : 'unknown error'}`,
+      );
+    }
+  }
+
+  return summary;
+}
 
 export async function generateSummary(
   transcript: string,

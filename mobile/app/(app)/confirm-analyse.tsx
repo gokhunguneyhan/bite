@@ -8,15 +8,14 @@ import {
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '@/src/constants/colors';
 import { useGenerateSummary } from '@/src/hooks/useSummary';
 import { FullScreenLoader } from '@/src/components/summary/FullScreenLoader';
 import { useToast } from '@/src/components/ui/Toast';
 import { useRevenueCat } from '@/src/providers/RevenueCatProvider';
+import { SUMMARIZE_THIS_VIDEO } from '@/src/utils/locale';
 
 export default function ConfirmAnalyseScreen() {
-  const insets = useSafeAreaInsets();
   const showToast = useToast();
   const params = useLocalSearchParams<{
     videoId: string;
@@ -31,7 +30,7 @@ export default function ConfirmAnalyseScreen() {
 
   // Estimate reading time based on duration label (rough heuristic)
   const estimatedTime = params.durationLabel
-    ? `~${Math.max(1, Math.ceil(parseDurationMinutes(params.durationLabel) * 0.3))} min read`
+    ? `~${estimateReadingMinutes(parseDurationMinutes(params.durationLabel))} min read`
     : '~2 min read';
 
   const handleConfirm = () => {
@@ -69,16 +68,7 @@ export default function ConfirmAnalyseScreen() {
   }
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      {/* Close button */}
-      <Pressable
-        style={styles.closeBtn}
-        onPress={() => router.back()}
-        accessibilityLabel="Go back"
-        accessibilityRole="button">
-        <Ionicons name="arrow-back" size={24} color={Colors.text} />
-      </Pressable>
-
+    <View style={styles.container}>
       <View style={styles.content}>
         {/* Thumbnail */}
         {params.thumbnailUrl ? (
@@ -115,6 +105,16 @@ export default function ConfirmAnalyseScreen() {
             <Text style={styles.metaText}>{estimatedTime}</Text>
           </View>
         </View>
+
+        {/* Long video warning */}
+        {params.durationLabel && parseDurationMinutes(params.durationLabel) >= 240 && (
+          <View style={styles.warningRow}>
+            <Ionicons name="warning-outline" size={16} color={Colors.warning} />
+            <Text style={styles.warningText}>
+              Videos over 4 hours may fail to summarise. For best results, use videos under 4 hours.
+            </Text>
+          </View>
+        )}
       </View>
 
       {/* CTA */}
@@ -122,10 +122,10 @@ export default function ConfirmAnalyseScreen() {
         <Pressable
           style={styles.analyseButton}
           onPress={handleConfirm}
-          accessibilityLabel="Confirm and analyse this video"
+          accessibilityLabel={SUMMARIZE_THIS_VIDEO}
           accessibilityRole="button">
           <Ionicons name="sparkles-outline" size={20} color="#fff" />
-          <Text style={styles.analyseButtonText}>Analyse this video</Text>
+          <Text style={styles.analyseButtonText}>{SUMMARIZE_THIS_VIDEO}</Text>
         </Pressable>
 
         <Pressable
@@ -137,6 +137,15 @@ export default function ConfirmAnalyseScreen() {
       </View>
     </View>
   );
+}
+
+/** Estimate summary reading time from video duration */
+function estimateReadingMinutes(minutes: number): number {
+  if (minutes <= 20) return Math.max(1, Math.ceil(minutes * 0.3));
+  if (minutes <= 60) return Math.ceil(5 + (minutes - 20) * 0.125); // 5–10
+  if (minutes <= 120) return Math.ceil(10 + (minutes - 60) * 0.08); // 10–15
+  if (minutes <= 180) return Math.ceil(15 + (minutes - 120) * 0.08); // 15–20
+  return Math.min(30, Math.ceil(20 + (minutes - 180) * 0.05)); // 20–30 cap
 }
 
 /** Parse "12:34" or "1:02:30" into total minutes */
@@ -220,6 +229,21 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.textSecondary,
     fontWeight: '500',
+  },
+  warningRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: Colors.warning + '15',
+    padding: 12,
+    borderRadius: 10,
+    marginTop: 4,
+  },
+  warningText: {
+    flex: 1,
+    fontSize: 13,
+    color: Colors.warning,
+    lineHeight: 18,
   },
   actions: {
     gap: 12,

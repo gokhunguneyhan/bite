@@ -25,6 +25,7 @@ import { usePreferences, useOnboardingStatus } from '@/src/hooks/usePreferences'
 import { useDueCards } from '@/src/hooks/useSpacedRepetition';
 import { useToast } from '@/src/components/ui/Toast';
 import { getChannelLatestVideos } from '@/src/services/youtubeImportService';
+import { useTrendingVideos } from '@/src/hooks/useCategoryVideos';
 import { FEATURED_CREATORS } from '@/src/constants/featuredCreators';
 import { MOCK_CHANNEL_VIDEOS, type YouTubeVideo } from '@/src/mocks/youtubeSubscriptions';
 import type { Summary, RefresherCard } from '@/src/types/summary';
@@ -59,9 +60,12 @@ export default function HomeScreen() {
   const showToast = useToast();
   const importMutation = useImportYouTubeSubscriptions();
 
+  const { data: trendingVideos, isLoading: isTrendingLoading } = useTrendingVideos();
+
   const dueCount = dueCards?.length ?? 0;
   const hasPersonalised = hasOnboarded === true;
   const hasSubscriptions = (subscriptions?.length ?? 0) > 0;
+  const isNewUser = !hasPersonalised && !hasSubscriptions;
 
   // Top 6 community summaries for "From the community"
   const topCommunity = useMemo(
@@ -448,8 +452,47 @@ export default function HomeScreen() {
         </View>
       )}
 
-      {/* 5. Suggested videos list */}
-      {suggestedVideos.length > 0 && (
+      {/* 5. Trending (new users) or Suggested for you (personalised users) */}
+      {isNewUser ? (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Trending</Text>
+          <Text style={styles.trendingSubtitle}>
+            Suggested videos from popular categories & channels
+          </Text>
+          {isTrendingLoading && (
+            <ActivityIndicator color={Colors.primary} style={styles.loader} />
+          )}
+          {(trendingVideos ?? []).map((video) => (
+            <Pressable
+              key={video.videoId}
+              style={styles.suggestedCard}
+              onPress={() => router.push({ pathname: '/confirm-analyse', params: { videoId: video.videoId, title: video.title, channelName: video.channelName, thumbnailUrl: video.thumbnailUrl, durationLabel: video.durationLabel ?? '' } })}
+              accessibilityLabel={`Analyse ${video.title}`}
+              accessibilityRole="button">
+              <Image
+                source={{ uri: video.thumbnailUrl }}
+                style={styles.suggestedCardThumb}
+                contentFit="cover"
+              />
+              <View style={styles.suggestedCardInfo}>
+                <Text style={styles.suggestedCardTitle}>
+                  {video.title}
+                </Text>
+                <View style={styles.suggestedCardMeta}>
+                  <Text style={styles.suggestedCardChannel}>
+                    {video.channelName}
+                    {video.durationLabel ? ` · ${video.durationLabel}` : ''}
+                  </Text>
+                  <View style={styles.summariseTagSmall}>
+                    <Ionicons name="sparkles" size={10} color="#fff" />
+                    <Text style={styles.summariseTagText}>Summarise</Text>
+                  </View>
+                </View>
+              </View>
+            </Pressable>
+          ))}
+        </View>
+      ) : suggestedVideos.length > 0 ? (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Suggested for you</Text>
           {suggestedVideos.map((video) => {
@@ -470,7 +513,7 @@ export default function HomeScreen() {
                     color={Colors.textSecondary}
                   />
                   <Text style={styles.suggestedReasonText}>
-                    {isChannel ? video.reason : video.reason}
+                    {video.reason}
                   </Text>
                 </View>
                 <Image
@@ -497,7 +540,7 @@ export default function HomeScreen() {
             );
           })}
         </View>
-      )}
+      ) : null}
 
       {/* Empty state */}
       {topCommunity.length === 0 && !isCommunityLoading && suggestedVideos.length === 0 && categoryCarousels.length === 0 && (
@@ -704,6 +747,14 @@ const styles = StyleSheet.create({
     color: Colors.text,
     marginBottom: 12,
     paddingHorizontal: 24,
+  },
+  trendingSubtitle: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+    paddingHorizontal: 24,
+    marginTop: -4,
+    marginBottom: 12,
+    lineHeight: 18,
   },
   // Carousel shared
   carouselContent: {

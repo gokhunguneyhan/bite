@@ -8,6 +8,7 @@ import {
   StyleSheet,
   ActivityIndicator,
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { useState } from 'react';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -72,6 +73,10 @@ export default function MoreScreen() {
               useYouTubeStore.getState().clear();
               useOfflineStore.getState().clear();
               useSettingsStore.getState().clear();
+              // Notify support (fire-and-forget, don't block sign-out)
+              Linking.canOpenURL('mailto:please@takeabite.ai').then((can) => {
+                if (can) Linking.openURL('mailto:please@takeabite.ai?subject=Account%20Data%20Deleted');
+              }).catch(() => {});
               // Sign out
               signOut();
               showToast('Your personal data has been deleted.');
@@ -181,6 +186,32 @@ export default function MoreScreen() {
 
       <Text style={styles.sectionTitle}>Other</Text>
       <View style={styles.card}>
+        <Pressable
+          style={styles.row}
+          onPress={async () => {
+            const url = 'mailto:please@takeabite.ai';
+            const canOpen = await Linking.canOpenURL(url);
+            if (canOpen) {
+              Linking.openURL(url);
+            } else {
+              await Clipboard.setStringAsync('please@takeabite.ai');
+              showToast('Email copied to clipboard');
+            }
+          }}
+          accessibilityLabel="Contact support"
+          accessibilityRole="button">
+          <Ionicons
+            name="mail-outline"
+            size={20}
+            color={Colors.text}
+          />
+          <Text style={styles.rowLabel}>Contact Support</Text>
+          <Ionicons
+            name="chevron-forward"
+            size={16}
+            color={Colors.tabIconDefault}
+          />
+        </Pressable>
         <Pressable
           style={styles.row}
           onPress={() => showToast('Coming soon')}

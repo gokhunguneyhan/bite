@@ -11,6 +11,7 @@ import { useLocalSearchParams, router } from 'expo-router';
 import { useMemo } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/src/constants/colors';
+import { SUMMARIZE } from '@/src/utils/locale';
 import {
   useChannelSummaries,
   useIsSubscribed,
@@ -18,6 +19,7 @@ import {
   useUnsubscribe,
 } from '@/src/hooks/useSummary';
 import { SummaryCard } from '@/src/components/summary/SummaryCard';
+import { useChannelInfo } from '@/src/hooks/useChannelInfo';
 import { getChannelLatestVideos } from '@/src/services/youtubeImportService';
 import type { YouTubeVideo } from '@/src/mocks/youtubeSubscriptions';
 
@@ -29,6 +31,7 @@ export default function CreatorScreen() {
   const subscribeMutation = useSubscribe();
   const unsubscribeMutation = useUnsubscribe();
 
+  const { data: channelInfo } = useChannelInfo(channelName);
   const isFollowing = subscribed === true;
   const isMutating = subscribeMutation.isPending || unsubscribeMutation.isPending;
 
@@ -69,7 +72,7 @@ export default function CreatorScreen() {
           params: { url: `https://youtube.com/watch?v=${item.videoId}` },
         })
       }
-      accessibilityLabel={`Analyse ${item.title}`}
+      accessibilityLabel={`${SUMMARIZE} ${item.title}`}
       accessibilityRole="button">
       <Image
         source={{ uri: item.thumbnailUrl }}
@@ -89,7 +92,7 @@ export default function CreatorScreen() {
       </View>
       <View style={styles.analyseTag}>
         <Ionicons name="sparkles-outline" size={14} color={Colors.primary} />
-        <Text style={styles.analyseTagText}>Analyse</Text>
+        <Text style={styles.analyseTagText}>{SUMMARIZE}</Text>
       </View>
     </Pressable>
   );
@@ -97,9 +100,13 @@ export default function CreatorScreen() {
   const header = (
     <View>
       <View style={styles.header}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{initial}</Text>
-        </View>
+        {channelInfo?.avatarUrl ? (
+          <Image source={{ uri: channelInfo.avatarUrl }} style={styles.avatar} />
+        ) : (
+          <View style={[styles.avatar, styles.avatarFallback]}>
+            <Text style={styles.avatarText}>{initial}</Text>
+          </View>
+        )}
         <Text style={styles.name}>{channelName}</Text>
         <Text style={styles.stats}>
           {count} {count === 1 ? 'summary' : 'summaries'}
@@ -143,7 +150,7 @@ export default function CreatorScreen() {
         <View style={styles.latestSection}>
           <Text style={styles.sectionTitle}>Latest Videos</Text>
           <Text style={styles.sectionSubtitle}>
-            Tap a video to analyse it
+            Tap a video to {SUMMARIZE.toLowerCase()} it
           </Text>
           <FlatList
             data={unanalysedVideos}
@@ -220,10 +227,12 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
+    marginBottom: 12,
+  },
+  avatarFallback: {
     backgroundColor: Colors.primary + '15',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
   },
   avatarText: {
     fontSize: 32,

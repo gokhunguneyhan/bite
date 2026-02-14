@@ -18,6 +18,7 @@ import { useSummaries, useSubscriptions, useImportYouTubeSubscriptions, useFollo
 import { usePreferences, useOnboardingStatus } from '@/src/hooks/usePreferences';
 import { useToast } from '@/src/components/ui/Toast';
 import { useBookmarkStore, type Bookmark } from '@/src/stores/bookmarkStore';
+import { SUMMARIZE } from '@/src/utils/locale';
 import { useUserFollowStore } from '@/src/stores/userFollowStore';
 import { VerticalVideoCard } from '@/src/components/summary/VerticalVideoCard';
 import { SwipeableRow } from '@/src/components/summary/SwipeableRow';
@@ -278,7 +279,7 @@ export default function ProfileScreen() {
               <Ionicons name="albums-outline" size={48} color={Colors.border} />
               <Text style={styles.emptyTitle}>No refresher cards yet</Text>
               <Text style={styles.emptySubtext}>
-                Analyse videos to generate refresher cards.
+                {SUMMARIZE} videos to generate refresher cards.
               </Text>
             </View>
           );
@@ -335,7 +336,7 @@ export default function ProfileScreen() {
               <Ionicons name="document-text-outline" size={48} color={Colors.border} />
               <Text style={styles.emptyTitle}>No summaries yet</Text>
               <Text style={styles.emptySubtext}>
-                Analyse a YouTube video to see it here.
+                {SUMMARIZE} a YouTube video to see it here.
               </Text>
             </View>
           );

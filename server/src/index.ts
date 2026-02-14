@@ -450,6 +450,64 @@ app.get('/api/channel/:channelId/videos', async (req, res) => {
   }
 });
 
+// Fetch channel info (avatar, channelId) by name — server-side API key
+app.get('/api/channel-info', async (req, res) => {
+  const channelName = String(req.query.name || '');
+  if (!channelName) {
+    res.status(400).json({ error: 'name query parameter required' });
+    return;
+  }
+
+  const apiKey = process.env.YOUTUBE_API_KEY;
+  if (!apiKey) {
+    res.status(500).json({ error: 'YouTube API key not configured' });
+    return;
+  }
+
+  try {
+    const url = new URL('https://www.googleapis.com/youtube/v3/search');
+    url.searchParams.set('part', 'snippet');
+    url.searchParams.set('q', channelName);
+    url.searchParams.set('type', 'channel');
+    url.searchParams.set('maxResults', '1');
+    url.searchParams.set('key', apiKey);
+
+    const ytRes = await fetch(url.toString());
+    if (!ytRes.ok) {
+      res.status(ytRes.status).json({ error: 'YouTube API error' });
+      return;
+    }
+
+    const data = await ytRes.json() as {
+      items?: Array<{
+        id: { channelId: string };
+        snippet: {
+          title: string;
+          thumbnails: Record<string, { url: string }>;
+        };
+      }>;
+    };
+
+    const ch = data.items?.[0];
+    if (!ch) {
+      res.json({ channelId: null, avatarUrl: null });
+      return;
+    }
+
+    res.json({
+      channelId: ch.id.channelId,
+      avatarUrl:
+        ch.snippet.thumbnails.medium?.url ??
+        ch.snippet.thumbnails.default?.url ??
+        null,
+      channelName: ch.snippet.title,
+    });
+  } catch (error) {
+    console.error('[channel-info] Error:', error);
+    res.status(500).json({ error: 'Failed to fetch channel info' });
+  }
+});
+
 // Task 3: Analytics Endpoints
 
 /**
