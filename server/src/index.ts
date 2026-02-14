@@ -438,7 +438,7 @@ app.get('/api/channel/:channelId/videos', async (req, res) => {
       thumbnailUrl:
         item.snippet.thumbnails.high?.url ??
         item.snippet.thumbnails.medium?.url ??
-        '',
+        `https://img.youtube.com/vi/${item.id.videoId}/hqdefault.jpg`,
       publishedAt: item.snippet.publishedAt,
       durationLabel: '',
     }));

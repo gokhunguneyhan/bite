@@ -419,7 +419,9 @@ export default function ExploreScreen() {
               <>
                 <Text style={styles.sectionTitle}>Latest Videos</Text>
                 <View style={styles.videoGrid}>
-                  {categoryVideos!.map((video) => (
+                  {categoryVideos!.map((video) => {
+                    const thumb = video.thumbnailUrl || `https://img.youtube.com/vi/${video.videoId}/hqdefault.jpg`;
+                    return (
                     <Pressable
                       key={video.videoId}
                       style={styles.videoGridCard}
@@ -430,7 +432,7 @@ export default function ExploreScreen() {
                             videoId: video.videoId,
                             title: video.title,
                             channelName: video.channelName,
-                            thumbnailUrl: video.thumbnailUrl,
+                            thumbnailUrl: thumb,
                             durationLabel: video.durationLabel ?? '',
                           },
                         })
@@ -438,7 +440,7 @@ export default function ExploreScreen() {
                       accessibilityLabel={`Summarise ${video.title}`}
                       accessibilityRole="button">
                       <Image
-                        source={{ uri: video.thumbnailUrl }}
+                        source={{ uri: thumb }}
                         style={styles.videoGridThumb}
                         contentFit="cover"
                       />
@@ -462,7 +464,8 @@ export default function ExploreScreen() {
                         </View>
                       </View>
                     </Pressable>
-                  ))}
+                  );
+                  })}
                 </View>
               </>
             )}

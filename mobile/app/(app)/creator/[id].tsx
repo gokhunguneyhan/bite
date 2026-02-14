@@ -63,7 +63,9 @@ export default function CreatorScreen() {
   const initial = channelName?.charAt(0)?.toUpperCase() ?? 'C';
   const count = summaries?.length ?? 0;
 
-  const renderVideoCard = ({ item }: { item: YouTubeVideo }) => (
+  const renderVideoCard = ({ item }: { item: YouTubeVideo }) => {
+    const thumb = item.thumbnailUrl || `https://img.youtube.com/vi/${item.videoId}/hqdefault.jpg`;
+    return (
     <Pressable
       style={styles.videoCard}
       onPress={() =>
@@ -75,7 +77,7 @@ export default function CreatorScreen() {
       accessibilityLabel={`${SUMMARIZE} ${item.title}`}
       accessibilityRole="button">
       <Image
-        source={{ uri: item.thumbnailUrl }}
+        source={{ uri: thumb }}
         style={styles.videoThumb}
         contentFit="cover"
       />
@@ -96,6 +98,7 @@ export default function CreatorScreen() {
       </View>
     </Pressable>
   );
+  };
 
   const header = (
     <View>

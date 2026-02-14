@@ -454,6 +454,7 @@ export default function SummaryScreen() {
             {isFollowing ? 'Following' : 'Follow'}
           </Text>
         </Pressable>
+        <Ionicons name="chevron-forward" size={16} color={Colors.tabIconDefault} />
       </Pressable>
 
       {/* Community Share Callout */}
@@ -685,6 +686,7 @@ export default function SummaryScreen() {
             {isFollowing ? 'Following' : 'Follow'}
           </Text>
         </Pressable>
+        <Ionicons name="chevron-forward" size={16} color={Colors.tabIconDefault} />
       </Pressable>
 
       {/* More like this — single mixed carousel */}
@@ -732,6 +734,7 @@ export default function SummaryScreen() {
                 );
               }
               const v = item.data as YouTubeVideo;
+              const thumb = v.thumbnailUrl || `https://img.youtube.com/vi/${v.videoId}/hqdefault.jpg`;
               return (
                 <Pressable
                   key={`v-${v.videoId}`}
@@ -743,14 +746,14 @@ export default function SummaryScreen() {
                         videoId: v.videoId,
                         title: v.title,
                         channelName: v.channelName,
-                        thumbnailUrl: v.thumbnailUrl,
+                        thumbnailUrl: thumb,
                         durationLabel: v.durationLabel ?? '',
                       },
                     })
                   }>
                   <View>
                     <Image
-                      source={{ uri: v.thumbnailUrl }}
+                      source={{ uri: thumb }}
                       style={styles.moreCardThumb}
                       contentFit="cover"
                     />
