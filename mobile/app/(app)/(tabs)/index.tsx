@@ -21,6 +21,7 @@ import {
   useSubscriptions,
   useImportYouTubeSubscriptions,
 } from '@/src/hooks/useSummary';
+import { useEditorsPicks, useEditorsPickIds } from '@/src/hooks/useEditorsPicks';
 import { usePreferences, useOnboardingStatus } from '@/src/hooks/usePreferences';
 import { useDueCards } from '@/src/hooks/useSpacedRepetition';
 import { useToast } from '@/src/components/ui/Toast';
@@ -61,6 +62,12 @@ export default function HomeScreen() {
   const importMutation = useImportYouTubeSubscriptions();
 
   const { data: trendingVideos, isLoading: isTrendingLoading } = useTrendingVideos();
+  const { data: editorsPicks } = useEditorsPicks();
+  const { data: editorsPickIds } = useEditorsPickIds();
+  const editorsPickSet = useMemo(
+    () => new Set(editorsPickIds ?? []),
+    [editorsPickIds],
+  );
 
   const dueCount = dueCards?.length ?? 0;
   const hasPersonalised = hasOnboarded === true;
@@ -304,7 +311,53 @@ export default function HomeScreen() {
         </View>
       )}
 
-      {/* 2. From the community carousel */}
+      {/* 2. Editor's Picks carousel */}
+      {(editorsPicks ?? []).length > 0 && (
+        <View style={styles.section}>
+          <Pressable
+            style={styles.sectionTitleRow}
+            onPress={() => router.push('/editors-picks')}
+            accessibilityLabel="View all editor's picks"
+            accessibilityRole="button">
+            <Text style={styles.sectionTitleInline}>Editor's Picks</Text>
+            <Ionicons name="chevron-forward" size={20} color={Colors.textSecondary} />
+          </Pressable>
+          <FlatList
+            data={(editorsPicks ?? []).slice(0, 5)}
+            keyExtractor={(item) => item.id}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.carouselContent}
+            renderItem={({ item }) => (
+              <Pressable
+                style={styles.communityCard}
+                onPress={() => router.push(`/summary/${item.id}`)}>
+                <View>
+                  <Image
+                    source={{ uri: item.thumbnailUrl }}
+                    style={styles.communityThumb}
+                    contentFit="cover"
+                  />
+                  <View style={styles.editorsPickOverlay}>
+                    <Ionicons name="star" size={10} color="#FFD700" />
+                    <Text style={styles.editorsPickOverlayText}>Editor's Pick</Text>
+                  </View>
+                </View>
+                <View style={styles.communityInfo}>
+                  <Text style={styles.communityTitle} numberOfLines={2}>
+                    {item.videoTitle}
+                  </Text>
+                  <Text style={styles.communityMeta} numberOfLines={1}>
+                    {item.channelName}
+                  </Text>
+                </View>
+              </Pressable>
+            )}
+          />
+        </View>
+      )}
+
+      {/* 3. From the community carousel */}
       {topCommunity.length > 0 && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>From the community</Text>
@@ -741,6 +794,18 @@ const styles = StyleSheet.create({
   section: {
     marginTop: 20,
   },
+  sectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 24,
+    marginBottom: 12,
+  },
+  sectionTitleInline: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: Colors.text,
+  },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
@@ -1006,5 +1071,22 @@ const styles = StyleSheet.create({
   },
   loader: {
     marginVertical: 20,
+  },
+  editorsPickOverlay: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  editorsPickOverlayText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#fff',
   },
 });

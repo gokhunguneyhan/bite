@@ -1,11 +1,13 @@
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/src/constants/colors';
 import type { Summary } from '@/src/types/summary';
 
 interface VerticalVideoCardProps {
   summary: Summary;
+  isEditorsPick?: boolean;
 }
 
 function getRelativeTime(dateString: string): string {
@@ -25,7 +27,7 @@ function getRelativeTime(dateString: string): string {
   return new Date(dateString).toLocaleDateString();
 }
 
-export function VerticalVideoCard({ summary }: VerticalVideoCardProps) {
+export function VerticalVideoCard({ summary, isEditorsPick }: VerticalVideoCardProps) {
   const relativeTime = getRelativeTime(summary.createdAt);
 
   return (
@@ -33,11 +35,19 @@ export function VerticalVideoCard({ summary }: VerticalVideoCardProps) {
       style={styles.container}
       onPress={() => router.push(`/summary/${summary.id}`)}
     >
-      <Image
-        source={{ uri: summary.thumbnailUrl }}
-        style={styles.thumbnail}
-        contentFit="cover"
-      />
+      <View>
+        <Image
+          source={{ uri: summary.thumbnailUrl }}
+          style={styles.thumbnail}
+          contentFit="cover"
+        />
+        {isEditorsPick && (
+          <View style={styles.editorsPickBadge}>
+            <Ionicons name="star" size={10} color="#FFD700" />
+            <Text style={styles.editorsPickBadgeText}>Editor's Pick</Text>
+          </View>
+        )}
+      </View>
       <View style={styles.content}>
         <Text style={styles.title} numberOfLines={2}>
           {summary.videoTitle}
@@ -109,5 +119,22 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: Colors.primary,
+  },
+  editorsPickBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  editorsPickBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#fff',
   },
 });

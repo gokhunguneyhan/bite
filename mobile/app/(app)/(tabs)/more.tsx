@@ -156,7 +156,7 @@ export default function MoreScreen() {
         <View style={styles.row}>
           <Ionicons name="diamond-outline" size={20} color={Colors.text} />
           <Text style={styles.rowLabel}>Subscription</Text>
-          <Text style={styles.rowValue}>{isPro ? 'Pro' : 'Free'}</Text>
+          <Text style={styles.rowValue}>{isPro ? 'Pro' : 'Taste'}</Text>
         </View>
         {!isPro && (
           <Pressable

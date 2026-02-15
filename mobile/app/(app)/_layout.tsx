@@ -91,6 +91,10 @@ export default function AppLayout() {
             name="review"
             options={{ title: 'Review Cards', presentation: 'fullScreenModal' }}
           />
+          <Stack.Screen
+            name="editors-picks"
+            options={{ title: "Editor's Picks", headerBackTitle: 'Back' }}
+          />
         </Stack>
         <Toast />
       </View>

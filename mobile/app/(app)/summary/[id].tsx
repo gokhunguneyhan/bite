@@ -42,6 +42,7 @@ import { useOfflineStore } from '@/src/stores/offlineStore';
 import { useRevenueCat } from '@/src/providers/RevenueCatProvider';
 import MiniYouTubePlayer, { PLAYER_HEIGHT } from '@/src/components/summary/MiniYouTubePlayer';
 import { useChannelInfo, useChannelVideos } from '@/src/hooks/useChannelInfo';
+import { useIsAdmin, useEditorsPickIds, useToggleEditorsPick } from '@/src/hooks/useEditorsPicks';
 import { SUMMARIZE } from '@/src/utils/locale';
 import type { Summary } from '@/src/types/summary';
 import type { YouTubeVideo } from '@/src/mocks/youtubeSubscriptions';
@@ -119,6 +120,12 @@ export default function SummaryScreen() {
   // Channel info (avatar, channelId) & more videos
   const { data: channelInfo } = useChannelInfo(summary?.channelName);
   const { data: channelVideos } = useChannelVideos(channelInfo?.channelId);
+
+  // Editor's picks
+  const { data: isAdmin } = useIsAdmin();
+  const { data: editorsPickIds } = useEditorsPickIds();
+  const togglePickMutation = useToggleEditorsPick();
+  const isEditorsPick = (editorsPickIds ?? []).includes(id);
 
   // Offline
   const isOfflineCached = useOfflineStore((s) => s.isCached(id));
@@ -392,6 +399,12 @@ export default function SummaryScreen() {
 
       {/* Video meta */}
       <View style={styles.videoMeta}>
+        {isEditorsPick && (
+          <View style={styles.editorsPickPill}>
+            <Ionicons name="star" size={14} color="#FFD700" />
+            <Text style={styles.editorsPickPillText}>Editor's Pick</Text>
+          </View>
+        )}
         <Text style={styles.videoTitle}>{summary.videoTitle}</Text>
         <View style={styles.metaRow}>
           <Text style={styles.langBadge}>
@@ -474,6 +487,38 @@ export default function SummaryScreen() {
           />
         )}
       </View>
+
+      {/* Admin: Editor's Pick toggle */}
+      {isAdmin && (
+        <View style={styles.blockSection}>
+          <Pressable
+            style={[
+              styles.adminPickBtn,
+              isEditorsPick && styles.adminPickBtnActive,
+            ]}
+            onPress={() => togglePickMutation.mutate(id)}
+            disabled={togglePickMutation.isPending}
+            accessibilityLabel={isEditorsPick ? "Remove from Editor's Picks" : "Add to Editor's Picks"}
+            accessibilityRole="button">
+            <Ionicons
+              name={isEditorsPick ? 'star' : 'star-outline'}
+              size={16}
+              color={isEditorsPick ? '#FFD700' : Colors.textSecondary}
+            />
+            <Text
+              style={[
+                styles.adminPickBtnText,
+                isEditorsPick && styles.adminPickBtnTextActive,
+              ]}>
+              {togglePickMutation.isPending
+                ? 'Updating...'
+                : isEditorsPick
+                  ? "Remove from Editor's Picks"
+                  : "Add to Editor's Picks"}
+            </Text>
+          </Pressable>
+        </View>
+      )}
 
       {/* Spacer for sticky section navigator */}
 
@@ -1367,5 +1412,47 @@ const styles = StyleSheet.create({
   similarContent: {
     paddingHorizontal: 20,
     gap: 12,
+  },
+  editorsPickPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    backgroundColor: '#FFD700' + '20',
+    borderWidth: 1,
+    borderColor: '#FFD700' + '40',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginBottom: 10,
+  },
+  editorsPickPillText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#B8860B',
+  },
+  adminPickBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: Colors.surface,
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  adminPickBtnActive: {
+    backgroundColor: '#FFD700' + '15',
+    borderColor: '#FFD700' + '40',
+  },
+  adminPickBtnText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: Colors.textSecondary,
+  },
+  adminPickBtnTextActive: {
+    color: '#B8860B',
+    fontWeight: '600',
   },
 });
