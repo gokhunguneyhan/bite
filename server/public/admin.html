@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bite Analytics Dashboard</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        background: #f0f2f5;
+        min-height: 100vh;
+      }
+      .top-bar {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 20px 24px;
+        color: white;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+      .top-bar h1 { font-size: 22px; }
+      .top-bar .controls { display: flex; gap: 8px; align-items: center; }
+      .top-bar select, .top-bar input {
+        padding: 8px 12px;
+        border: none;
+        border-radius: 8px;
+        font-size: 13px;
+        background: rgba(255,255,255,0.2);
+        color: white;
+      }
+      .top-bar select option { color: #333; background: white; }
+      .top-bar input::placeholder { color: rgba(255,255,255,0.6); }
+      .auth-bar {
+        background: white;
+        padding: 16px 24px;
+        border-bottom: 1px solid #e5e7eb;
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      .auth-bar input {
+        flex: 1;
+        padding: 10px 14px;
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+        font-size: 14px;
+      }
+      .auth-bar button {
+        padding: 10px 20px;
+        background: #667eea;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 14px;
+      }
+      .auth-bar button:hover { background: #5a6fd6; }
+      .container { max-width: 1400px; margin: 0 auto; padding: 24px; }
+
+      /* Tabs */
+      .tabs {
+        display: flex;
+        gap: 4px;
+        margin-bottom: 24px;
+        flex-wrap: wrap;
+      }
+      .tab {
+        padding: 10px 18px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+        color: #6b7280;
+        background: white;
+        border: 1px solid #e5e7eb;
+        transition: all 0.2s;
+      }
+      .tab:hover { background: #f9fafb; }
+      .tab.active { background: #667eea; color: white; border-color: #667eea; }
+      .tab-content { display: none; }
+      .tab-content.active { display: block; }
+
+      /* Cards */
+      .kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 16px;
+        margin-bottom: 24px;
+      }
+      .kpi-card {
+        background: white;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+      }
+      .kpi-value {
+        font-size: 28px;
+        font-weight: 700;
+        color: #667eea;
+        margin-bottom: 4px;
+      }
+      .kpi-label {
+        font-size: 12px;
+        color: #6b7280;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-weight: 600;
+      }
+
+      .section {
+        background: white;
+        padding: 24px;
+        border-radius: 12px;
+        margin-bottom: 24px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+      }
+      .section h2 {
+        font-size: 18px;
+        color: #1f2937;
+        margin-bottom: 16px;
+        font-weight: 700;
+      }
+
+      /* Charts (CSS-only bar charts) */
+      .bar-chart { display: flex; flex-direction: column; gap: 8px; }
+      .bar-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .bar-label {
+        width: 120px;
+        font-size: 13px;
+        color: #374151;
+        text-align: right;
+        flex-shrink: 0;
+      }
+      .bar-track {
+        flex: 1;
+        height: 28px;
+        background: #f3f4f6;
+        border-radius: 6px;
+        overflow: hidden;
+        position: relative;
+      }
+      .bar-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #667eea, #764ba2);
+        border-radius: 6px;
+        transition: width 0.5s ease;
+        min-width: 2px;
+      }
+      .bar-fill.red { background: linear-gradient(90deg, #ef4444, #dc2626); }
+      .bar-fill.green { background: linear-gradient(90deg, #10b981, #059669); }
+      .bar-fill.amber { background: linear-gradient(90deg, #f59e0b, #d97706); }
+      .bar-value {
+        width: 80px;
+        font-size: 13px;
+        color: #6b7280;
+        font-weight: 600;
+        flex-shrink: 0;
+      }
+
+      /* Tables */
+      table { width: 100%; border-collapse: collapse; }
+      thead { background: #f9fafb; }
+      th {
+        text-align: left;
+        padding: 12px 16px;
+        font-weight: 600;
+        color: #374151;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        border-bottom: 2px solid #e5e7eb;
+      }
+      td {
+        padding: 12px 16px;
+        border-bottom: 1px solid #f3f4f6;
+        color: #1f2937;
+        font-size: 14px;
+      }
+      tbody tr:hover { background: #f9fafb; }
+
+      .badge {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 11px;
+        font-weight: 600;
+      }
+      .badge-red { background: #fee2e2; color: #991b1b; }
+      .badge-green { background: #d1fae5; color: #065f46; }
+      .badge-blue { background: #dbeafe; color: #1e40af; }
+      .badge-amber { background: #fef3c7; color: #92400e; }
+
+      .retry-btn {
+        padding: 4px 10px;
+        background: #667eea;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .retry-btn:hover { background: #5a6fd6; }
+
+      a { color: #667eea; text-decoration: none; }
+      a:hover { text-decoration: underline; }
+
+      .empty { text-align: center; padding: 40px; color: #9ca3af; }
+      .loading { text-align: center; padding: 40px; color: #6b7280; }
+      .error-box { background: #fee2e2; color: #991b1b; padding: 16px; border-radius: 8px; border-left: 4px solid #dc2626; }
+
+      .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+      @media (max-width: 768px) { .two-col { grid-template-columns: 1fr; } }
+
+      .donut-legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; }
+      .legend-item { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #374151; }
+      .legend-dot { width: 12px; height: 12px; border-radius: 3px; }
+
+      .perf-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 20px; }
+      .perf-card { text-align: center; padding: 16px; background: #f9fafb; border-radius: 8px; }
+      .perf-card .value { font-size: 24px; font-weight: 700; color: #667eea; }
+      .perf-card .label { font-size: 11px; color: #6b7280; text-transform: uppercase; margin-top: 4px; }
+
+      #login-section { display: block; }
+      #dashboard-section { display: none; }
+    </style>
+  </head>
+  <body>
+    <div class="top-bar">
+      <h1>Bite Analytics Dashboard</h1>
+      <div class="controls" id="top-controls" style="display:none;">
+        <select id="date-range" onchange="onDateRangeChange()">
+          <option value="7d">Last 7 days</option>
+          <option value="30d" selected>Last 30 days</option>
+          <option value="90d">Last 90 days</option>
+          <option value="all">All time</option>
+        </select>
+        <span id="last-updated" style="font-size:12px;opacity:0.7;"></span>
+      </div>
+    </div>
+
+    <!-- Auth -->
+    <div id="login-section">
+      <div class="auth-bar">
+        <input type="password" id="token-input" placeholder="Paste your Supabase access token (Bearer token from mobile app)" />
+        <button onclick="authenticate()">Login</button>
+      </div>
+      <div class="container">
+        <div class="section">
+          <h2>Admin Login Required</h2>
+          <p style="color:#6b7280;">To access the dashboard, paste your Supabase access token. You can find this in the mobile app's network requests (Authorization header), or generate one via Supabase.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Dashboard -->
+    <div id="dashboard-section">
+      <div class="container">
+        <div class="tabs">
+          <div class="tab active" data-tab="overview">Overview</div>
+          <div class="tab" data-tab="categories">Categories</div>
+          <div class="tab" data-tab="performance">Performance</div>
+          <div class="tab" data-tab="costs">Costs</div>
+          <div class="tab" data-tab="users">Users</div>
+          <div class="tab" data-tab="errors">Errors</div>
+          <div class="tab" data-tab="cache">Cache</div>
+        </div>
+
+        <!-- Overview -->
+        <div class="tab-content active" id="tab-overview">
+          <div class="kpi-grid" id="kpi-cards"><div class="loading">Loading...</div></div>
+          <div class="two-col">
+            <div class="section">
+              <h2>Success / Failure</h2>
+              <div id="success-failure-chart"></div>
+            </div>
+            <div class="section">
+              <h2>Top Error Types</h2>
+              <div id="error-types-chart"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Categories -->
+        <div class="tab-content" id="tab-categories">
+          <div class="section">
+            <h2>Category Distribution</h2>
+            <div id="category-chart"></div>
+          </div>
+          <div class="section">
+            <h2>Cost per Category</h2>
+            <div id="category-cost-chart"></div>
+          </div>
+        </div>
+
+        <!-- Performance -->
+        <div class="tab-content" id="tab-performance">
+          <div class="section">
+            <h2>Response Time Percentiles</h2>
+            <div class="perf-grid" id="perf-percentiles"></div>
+          </div>
+          <div class="section">
+            <h2>Volume Over Time (Daily)</h2>
+            <div id="volume-daily-chart"></div>
+          </div>
+          <div class="two-col">
+            <div class="section">
+              <h2>Volume by Hour of Day (UTC)</h2>
+              <div id="volume-hourly-chart"></div>
+            </div>
+            <div class="section">
+              <h2>Volume by Day of Week</h2>
+              <div id="volume-dow-chart"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Costs -->
+        <div class="tab-content" id="tab-costs">
+          <div class="kpi-grid" id="cost-kpis"></div>
+          <div class="two-col">
+            <div class="section">
+              <h2>Cost by Video Duration</h2>
+              <div id="cost-duration-chart"></div>
+            </div>
+            <div class="section">
+              <h2>Daily Cost Trend</h2>
+              <div id="cost-trend-chart"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Users -->
+        <div class="tab-content" id="tab-users">
+          <div class="kpi-grid" id="user-kpis"></div>
+          <div class="two-col">
+            <div class="section">
+              <h2>Summaries per User</h2>
+              <div id="user-histogram-chart"></div>
+            </div>
+            <div class="section">
+              <h2>Retention</h2>
+              <div id="retention-table"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Errors -->
+        <div class="tab-content" id="tab-errors">
+          <div class="section">
+            <h2>Error Taxonomy</h2>
+            <div id="error-taxonomy-chart"></div>
+          </div>
+          <div class="section">
+            <h2>Failed Sessions Log</h2>
+            <div id="failed-sessions-table"></div>
+          </div>
+        </div>
+
+        <!-- Cache (legacy) -->
+        <div class="tab-content" id="tab-cache">
+          <div class="kpi-grid" id="cache-kpis"><div class="loading">Loading...</div></div>
+          <div class="section">
+            <h2>Cost Impact</h2>
+            <div id="cost-savings"></div>
+          </div>
+          <div class="section">
+            <h2>Most Popular Videos</h2>
+            <table>
+              <thead><tr><th>#</th><th>Video</th><th>Channel</th><th>Requests</th><th>First Cached</th></tr></thead>
+              <tbody id="popular-videos"><tr><td colspan="5" class="loading">Loading...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      let authToken = localStorage.getItem('bite_admin_token') || '';
+      if (authToken) showDashboard();
+
+      // ── Auth ──
+      function authenticate() {
+        authToken = document.getElementById('token-input').value.trim();
+        if (!authToken) return alert('Please enter a token');
+        localStorage.setItem('bite_admin_token', authToken);
+        showDashboard();
+      }
+
+      function showDashboard() {
+        document.getElementById('login-section').style.display = 'none';
+        document.getElementById('dashboard-section').style.display = 'block';
+        document.getElementById('top-controls').style.display = 'flex';
+        loadAll();
+      }
+
+      function authHeaders() {
+        return { Authorization: `Bearer ${authToken}` };
+      }
+
+      async function apiFetch(url) {
+        const res = await fetch(url, { headers: authHeaders() });
+        if (res.status === 401 || res.status === 403) {
+          localStorage.removeItem('bite_admin_token');
+          authToken = '';
+          document.getElementById('login-section').style.display = 'block';
+          document.getElementById('dashboard-section').style.display = 'none';
+          document.getElementById('top-controls').style.display = 'none';
+          throw new Error('Unauthorized');
+        }
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      }
+
+      // ── Tabs ──
+      document.querySelectorAll('.tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+          document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+          document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+          tab.classList.add('active');
+          document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+        });
+      });
+
+      // ── Date range ──
+      function getDateRange() {
+        const val = document.getElementById('date-range').value;
+        if (val === 'all') return '';
+        const days = val === '7d' ? 7 : val === '90d' ? 90 : 30;
+        const from = new Date(Date.now() - days * 86400000).toISOString();
+        return `?from=${from}`;
+      }
+
+      function onDateRangeChange() { loadAll(); }
+
+      // ── Bar chart helper ──
+      function renderBars(containerId, items, opts = {}) {
+        const el = document.getElementById(containerId);
+        if (!items || items.length === 0) { el.innerHTML = '<div class="empty">No data yet</div>'; return; }
+        const maxVal = Math.max(...items.map(i => i.value), 1);
+        el.innerHTML = '<div class="bar-chart">' + items.map(i => {
+          const pct = Math.max((i.value / maxVal) * 100, 1);
+          const cls = i.colorClass || '';
+          return `<div class="bar-row">
+            <div class="bar-label">${i.label}</div>
+            <div class="bar-track"><div class="bar-fill ${cls}" style="width:${pct}%"></div></div>
+            <div class="bar-value">${i.display || i.value}</div>
+          </div>`;
+        }).join('') + '</div>';
+      }
+
+      // ── Load all data ──
+      async function loadAll() {
+        const q = getDateRange();
+        document.getElementById('last-updated').textContent = 'Loading...';
+
+        try {
+          await Promise.all([
+            loadOverview(q),
+            loadCategories(q),
+            loadPerformance(q),
+            loadCosts(q),
+            loadUsers(q),
+            loadErrors(q),
+            loadCache(),
+          ]);
+        } catch(e) { console.error(e); }
+
+        document.getElementById('last-updated').textContent =
+          'Updated ' + new Date().toLocaleTimeString();
+      }
+
+      // ── Overview ──
+      async function loadOverview(q) {
+        try {
+          const [overviewRes, errRes] = await Promise.all([
+            apiFetch('/api/admin/analytics/overview' + q),
+            apiFetch('/api/admin/analytics/errors' + q),
+          ]);
+          const d = overviewRes.data;
+          document.getElementById('kpi-cards').innerHTML = `
+            <div class="kpi-card"><div class="kpi-value">${d.totalSummaries}</div><div class="kpi-label">Total Summaries</div></div>
+            <div class="kpi-card"><div class="kpi-value">${d.successRate}%</div><div class="kpi-label">Success Rate</div></div>
+            <div class="kpi-card"><div class="kpi-value">${(d.avgProcessingMs / 1000).toFixed(1)}s</div><div class="kpi-label">Avg Processing</div></div>
+            <div class="kpi-card"><div class="kpi-value">$${d.totalCost.toFixed(2)}</div><div class="kpi-label">Total Cost</div></div>
+            <div class="kpi-card"><div class="kpi-value">${d.activeUsers}</div><div class="kpi-label">Active Users</div></div>
+            <div class="kpi-card"><div class="kpi-value">${d.failureCount}</div><div class="kpi-label">Failures</div></div>
+          `;
+
+          // Success/Failure bars
+          renderBars('success-failure-chart', [
+            { label: 'Success', value: d.successCount, colorClass: 'green' },
+            { label: 'Failed', value: d.failureCount, colorClass: 'red' },
+          ]);
+
+          // Error types
+          const errData = errRes.data;
+          renderBars('error-types-chart', errData.taxonomy.map(t => ({
+            label: t.type.replace(/_/g, ' '),
+            value: t.count,
+            colorClass: 'red',
+          })));
+        } catch(e) {
+          document.getElementById('kpi-cards').innerHTML = '<div class="error-box">Failed to load overview</div>';
+        }
+      }
+
+      // ── Categories ──
+      async function loadCategories(q) {
+        try {
+          const res = await apiFetch('/api/admin/analytics/categories' + q);
+          const cats = res.data;
+
+          renderBars('category-chart', cats.map(c => ({
+            label: c.category,
+            value: c.count,
+            display: `${c.count} (${c.percentage}%)`,
+          })));
+
+          renderBars('category-cost-chart', cats.map(c => ({
+            label: c.category,
+            value: c.totalCost,
+            display: `$${c.totalCost.toFixed(2)} (avg $${c.avgCost.toFixed(4)})`,
+            colorClass: 'amber',
+          })));
+        } catch(e) {
+          document.getElementById('category-chart').innerHTML = '<div class="empty">No data</div>';
+        }
+      }
+
+      // ── Performance ──
+      async function loadPerformance(q) {
+        try {
+          const res = await apiFetch('/api/admin/analytics/performance' + q);
+          const d = res.data;
+
+          document.getElementById('perf-percentiles').innerHTML = `
+            <div class="perf-card"><div class="value">${(d.p50/1000).toFixed(1)}s</div><div class="label">p50</div></div>
+            <div class="perf-card"><div class="value">${(d.p90/1000).toFixed(1)}s</div><div class="label">p90</div></div>
+            <div class="perf-card"><div class="value">${(d.p99/1000).toFixed(1)}s</div><div class="label">p99</div></div>
+            <div class="perf-card"><div class="value">${d.avgRetry}</div><div class="label">Avg Retries</div></div>
+          `;
+
+          // Daily volume
+          renderBars('volume-daily-chart', d.volumeDaily.slice(-14).map(v => ({
+            label: v.day.slice(5),
+            value: v.total,
+            display: `${v.success}/${v.failed ? v.failed + ' fail' : v.total}`,
+          })));
+
+          // Hourly
+          renderBars('volume-hourly-chart', d.volumeHourly.filter(h => h.count > 0).map(h => ({
+            label: `${h.hour}:00`,
+            value: h.count,
+          })));
+
+          // Day of week
+          renderBars('volume-dow-chart', d.volumeDow.map(d => ({
+            label: d.day,
+            value: d.count,
+          })));
+        } catch(e) {
+          document.getElementById('perf-percentiles').innerHTML = '<div class="empty">No data</div>';
+        }
+      }
+
+      // ── Costs ──
+      async function loadCosts(q) {
+        try {
+          const res = await apiFetch('/api/admin/analytics/costs' + q);
+          const d = res.data;
+
+          document.getElementById('cost-kpis').innerHTML = `
+            <div class="kpi-card"><div class="kpi-value">$${d.totalCost.toFixed(2)}</div><div class="kpi-label">Total Cost</div></div>
+            <div class="kpi-card"><div class="kpi-value">$${d.avgCost.toFixed(4)}</div><div class="kpi-label">Avg Cost / Summary</div></div>
+            <div class="kpi-card"><div class="kpi-value">${d.totalSummaries}</div><div class="kpi-label">Total Summaries</div></div>
+          `;
+
+          renderBars('cost-duration-chart', d.byDuration.map(b => ({
+            label: b.bucket,
+            value: b.totalCost,
+            display: `$${b.totalCost.toFixed(2)} (${b.count} vids, avg $${b.avgCost.toFixed(4)})`,
+            colorClass: 'amber',
+          })));
+
+          renderBars('cost-trend-chart', d.costTrend.slice(-14).map(t => ({
+            label: t.day.slice(5),
+            value: t.cost,
+            display: `$${t.cost.toFixed(2)}`,
+            colorClass: 'amber',
+          })));
+        } catch(e) {
+          document.getElementById('cost-kpis').innerHTML = '<div class="empty">No data</div>';
+        }
+      }
+
+      // ── Users ──
+      async function loadUsers(q) {
+        try {
+          const res = await apiFetch('/api/admin/analytics/users' + q);
+          const d = res.data;
+
+          document.getElementById('user-kpis').innerHTML = `
+            <div class="kpi-card"><div class="kpi-value">${d.totalUsers}</div><div class="kpi-label">Total Users</div></div>
+            <div class="kpi-card"><div class="kpi-value">${d.newUsers}</div><div class="kpi-label">One-time Users</div></div>
+            <div class="kpi-card"><div class="kpi-value">${d.returningUsers}</div><div class="kpi-label">Returning Users</div></div>
+          `;
+
+          renderBars('user-histogram-chart', d.histogram.map(h => ({
+            label: h.bucket + ' summaries',
+            value: h.count,
+            display: `${h.count} users`,
+            colorClass: 'green',
+          })));
+
+          document.getElementById('retention-table').innerHTML = `
+            <table>
+              <thead><tr><th>Metric</th><th>Count</th><th>Rate</th></tr></thead>
+              <tbody>
+                <tr><td>D1 Retention</td><td>${d.retention.d1.count}</td><td><span class="badge badge-blue">${d.retention.d1.rate}%</span></td></tr>
+                <tr><td>D7 Retention</td><td>${d.retention.d7.count}</td><td><span class="badge badge-blue">${d.retention.d7.rate}%</span></td></tr>
+                <tr><td>D30 Retention</td><td>${d.retention.d30.count}</td><td><span class="badge badge-blue">${d.retention.d30.rate}%</span></td></tr>
+              </tbody>
+            </table>
+          `;
+        } catch(e) {
+          document.getElementById('user-kpis').innerHTML = '<div class="empty">No data</div>';
+        }
+      }
+
+      // ── Errors ──
+      async function loadErrors(q) {
+        try {
+          const res = await apiFetch('/api/admin/analytics/errors' + q);
+          const d = res.data;
+
+          renderBars('error-taxonomy-chart', d.taxonomy.map(t => ({
+            label: t.type.replace(/_/g, ' '),
+            value: t.count,
+            colorClass: 'red',
+          })));
+
+          if (d.failedSessions.length === 0) {
+            document.getElementById('failed-sessions-table').innerHTML = '<div class="empty">No failed sessions</div>';
+            return;
+          }
+
+          document.getElementById('failed-sessions-table').innerHTML = `
+            <table>
+              <thead><tr><th>Video</th><th>Error Type</th><th>Message</th><th>Time</th><th>Action</th></tr></thead>
+              <tbody>${d.failedSessions.map(s => `
+                <tr>
+                  <td><a href="https://youtube.com/watch?v=${s.videoId}" target="_blank">${s.videoId}</a></td>
+                  <td><span class="badge badge-red">${(s.errorType || 'unknown').replace(/_/g, ' ')}</span></td>
+                  <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(s.errorMessage||'').replace(/"/g, '&quot;')}">${s.errorMessage || '-'}</td>
+                  <td style="white-space:nowrap;">${new Date(s.createdAt).toLocaleString()}</td>
+                  <td><a href="https://youtube.com/watch?v=${s.videoId}" target="_blank" class="retry-btn">Test</a></td>
+                </tr>
+              `).join('')}</tbody>
+            </table>
+          `;
+        } catch(e) {
+          document.getElementById('error-taxonomy-chart').innerHTML = '<div class="empty">No data</div>';
+        }
+      }
+
+      // ── Cache (legacy endpoints, no auth needed) ──
+      async function loadCache() {
+        try {
+          const [statsRes, videosRes] = await Promise.all([
+            fetch('/api/admin/cache-stats').then(r => r.json()),
+            fetch('/api/admin/popular-videos').then(r => r.json()),
+          ]);
+
+          const s = statsRes.stats;
+          document.getElementById('cache-kpis').innerHTML = `
+            <div class="kpi-card"><div class="kpi-value">${s.totalRequests}</div><div class="kpi-label">Total Requests</div></div>
+            <div class="kpi-card"><div class="kpi-value">${s.uniqueVideos}</div><div class="kpi-label">Unique Videos</div></div>
+            <div class="kpi-card"><div class="kpi-value">${s.cacheHitRate}</div><div class="kpi-label">Cache Hit Rate</div></div>
+            <div class="kpi-card"><div class="kpi-value">${s.avgRequestsPerVideo}</div><div class="kpi-label">Avg Req/Video</div></div>
+          `;
+
+          const cs = s.costSavings;
+          document.getElementById('cost-savings').innerHTML = `
+            <div style="background:linear-gradient(135deg,#667eea,#764ba2);color:white;padding:20px;border-radius:8px;">
+              <div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:14px;">
+                <span>Generations Cost:</span><span>$${cs.totalCost}</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:14px;">
+                <span>Cache Savings (${cs.totalCacheHits} hits):</span><span>$${cs.savedCost}</span>
+              </div>
+            </div>
+          `;
+
+          const vids = videosRes.videos || [];
+          document.getElementById('popular-videos').innerHTML = vids.length === 0
+            ? '<tr><td colspan="5" class="empty">No cached videos yet</td></tr>'
+            : vids.map((v, i) => `
+              <tr>
+                <td style="font-weight:700;color:#667eea;">${i+1}</td>
+                <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${v.video_title}</td>
+                <td style="color:#6b7280;">${v.channel_name || '-'}</td>
+                <td style="font-weight:700;color:#667eea;">${v.request_count}</td>
+                <td style="color:#9ca3af;">${new Date(v.created_at).toLocaleDateString()}</td>
+              </tr>
+            `).join('');
+        } catch(e) {
+          document.getElementById('cache-kpis').innerHTML = '<div class="error-box">Failed to load cache stats</div>';
+        }
+      }
+
+      // Auto-refresh every 60 seconds
+      setInterval(loadAll, 60000);
+    </script>
+  </body>
+</html>

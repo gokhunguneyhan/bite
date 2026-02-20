@@ -10,7 +10,20 @@ import { translateSummaryContent } from './services/translate.js';
 import { getOrGenerateAudio } from './services/tts.js';
 import rateLimit from 'express-rate-limit';
 import { requireAuth } from './middleware/auth.js';
+import { requireAdmin } from './middleware/requireAdmin.js';
 import { supabase } from './lib/supabase.js';
+import {
+  recordAnalytics,
+  computeCost,
+  classifyError,
+  countWords,
+  getOverview,
+  getCategoryStats,
+  getPerformanceStats,
+  getCostStats,
+  getUserCohorts,
+  getErrorStats,
+} from './services/analytics.js';
 
 const app = express();
 const PORT = process.env.PORT ?? 3000;
@@ -99,6 +112,30 @@ app.post('/api/summarize', summarizeLimiter, requireAuth, async (req, res) => {
 
     console.log(`[summarize] Summary generated for "${metadata.title}"`);
 
+    // Record analytics (async, don't block response)
+    const outputText = [
+      summary.quickSummary,
+      ...summary.contextualSections.map((s) => s.content),
+    ].join(' ');
+
+    recordAnalytics({
+      video_id: videoId,
+      user_id: req.user!.id,
+      video_duration_seconds: durationSeconds,
+      video_language: originalLanguage,
+      source_platform: 'youtube',
+      processing_time_ms: summary._processingTimeMs ?? 0,
+      token_usage_input: summary._usage?.input_tokens ?? 0,
+      token_usage_output: summary._usage?.output_tokens ?? 0,
+      token_usage_total: (summary._usage?.input_tokens ?? 0) + (summary._usage?.output_tokens ?? 0),
+      token_cache_read: summary._usage?.cache_read_input_tokens ?? 0,
+      token_cache_creation: summary._usage?.cache_creation_input_tokens ?? 0,
+      estimated_cost_usd: summary._usage ? computeCost(summary._usage) : 0,
+      output_word_count: countWords(outputText),
+      status: 'success',
+      was_cache_hit: summary._wasCacheHit ?? false,
+    });
+
     const summaryData = {
       video_id: videoId,
       video_title: metadata.title,
@@ -129,6 +166,18 @@ app.post('/api/summarize', summarizeLimiter, requireAuth, async (req, res) => {
       if (dbError) {
         console.error('[summarize] DB insert error:', dbError);
       } else {
+        // Update analytics row with the summary_id (fire and forget)
+        if (supabase && dbRecord?.id) {
+          supabase
+            .from('summary_analytics')
+            .update({ summary_id: dbRecord.id })
+            .eq('video_id', videoId)
+            .eq('user_id', req.user!.id)
+            .is('summary_id', null)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .then(() => {});
+        }
         res.json(mapDbToSummary(dbRecord));
         return;
       }
@@ -158,6 +207,16 @@ app.post('/api/summarize', summarizeLimiter, requireAuth, async (req, res) => {
     const message =
       error instanceof Error ? error.message : 'Unknown error';
     console.error(`[summarize] Error:`, error);
+
+    // Record failed analytics
+    recordAnalytics({
+      video_id: videoId,
+      user_id: req.user!.id,
+      status: 'failed',
+      error_type: classifyError(message),
+      error_message: message.slice(0, 500),
+      source_platform: 'youtube',
+    });
 
     if (message.includes('[VIDEO_UNAVAILABLE]')) {
       res.status(404).json({
@@ -603,6 +662,74 @@ app.get('/api/admin/cache-stats', async (req, res) => {
   } catch (error: any) {
     console.error('[analytics] Cache stats exception:', error);
     res.status(500).json({ error: error.message || 'Unknown error' });
+  }
+});
+
+// ── Admin Analytics API (requires admin auth) ──
+
+function parseDateRange(req: express.Request) {
+  const from = req.query.from as string | undefined;
+  const to = req.query.to as string | undefined;
+  return { from, to };
+}
+
+app.get('/api/admin/analytics/overview', requireAdmin, async (req, res) => {
+  try {
+    const { from, to } = parseDateRange(req);
+    const data = await getOverview(from, to);
+    res.json({ success: true, data });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/admin/analytics/categories', requireAdmin, async (req, res) => {
+  try {
+    const { from, to } = parseDateRange(req);
+    const data = await getCategoryStats(from, to);
+    res.json({ success: true, data });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/admin/analytics/performance', requireAdmin, async (req, res) => {
+  try {
+    const { from, to } = parseDateRange(req);
+    const data = await getPerformanceStats(from, to);
+    res.json({ success: true, data });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/admin/analytics/costs', requireAdmin, async (req, res) => {
+  try {
+    const { from, to } = parseDateRange(req);
+    const data = await getCostStats(from, to);
+    res.json({ success: true, data });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/admin/analytics/users', requireAdmin, async (req, res) => {
+  try {
+    const { from, to } = parseDateRange(req);
+    const data = await getUserCohorts(from, to);
+    res.json({ success: true, data });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/admin/analytics/errors', requireAdmin, async (req, res) => {
+  try {
+    const { from, to } = parseDateRange(req);
+    const data = await getErrorStats(from, to);
+    res.json({ success: true, data });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
   }
 });
 

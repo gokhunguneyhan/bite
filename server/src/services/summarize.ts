@@ -21,6 +21,13 @@ export function calculateTimeoutMs(transcriptLength: number): number {
   return seconds * 1000;
 }
 
+export interface SummaryUsage {
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_input_tokens: number;
+  cache_creation_input_tokens: number;
+}
+
 export interface SummaryResult {
   quickSummary: string;
   contextualSections: {
@@ -46,6 +53,10 @@ export interface SummaryResult {
     category: 'by_speaker' | 'recommended';
   }[];
   category: string;
+  /** Populated after generation (not from cache) */
+  _usage?: SummaryUsage;
+  _processingTimeMs?: number;
+  _wasCacheHit?: boolean;
 }
 
 /**
@@ -199,7 +210,9 @@ export async function getCachedSummary(
           }
         })();
 
-        return cached.summary_data as SummaryResult;
+        const result = cached.summary_data as SummaryResult;
+        result._wasCacheHit = true;
+        return result;
       }
     } catch (err) {
       console.error(`[cache] Cache lookup failed: ${err instanceof Error ? err.message : 'unknown error'}`);
@@ -249,6 +262,8 @@ export async function generateSummary(
   const requestTimeout = timeoutMs ?? calculateTimeoutMs(transcript.length);
   console.log(`[summarize] Timeout set to ${requestTimeout / 1000}s`);
 
+  const startTime = Date.now();
+
   // Stream the response to keep the TCP connection alive during Claude's processing.
   // Without streaming, the socket sits idle while Claude reads 40K+ tokens,
   // and macOS kills it with ETIMEDOUT after ~120s of silence.
@@ -274,11 +289,13 @@ export async function generateSummary(
   );
 
   const response = await stream.finalMessage();
+  const processingTimeMs = Date.now() - startTime;
 
   const text =
     response.content[0].type === 'text' ? response.content[0].text : '';
 
-  console.log(`[summarize] Claude response: ${text.length} chars, stop_reason=${response.stop_reason}, usage=${JSON.stringify(response.usage)}`);
+  const usage = response.usage as any;
+  console.log(`[summarize] Claude response: ${text.length} chars, ${processingTimeMs}ms, stop_reason=${response.stop_reason}, usage=${JSON.stringify(usage)}`);
 
   // Extract JSON from response (handle potential markdown wrapping)
   const jsonMatch = text.match(/\{[\s\S]*\}/);
@@ -293,6 +310,16 @@ export async function generateSummary(
     ...card,
     id: card.id || `rc${i + 1}`,
   }));
+
+  // Attach usage metadata for analytics
+  parsed._usage = {
+    input_tokens: usage?.input_tokens ?? 0,
+    output_tokens: usage?.output_tokens ?? 0,
+    cache_read_input_tokens: usage?.cache_read_input_tokens ?? 0,
+    cache_creation_input_tokens: usage?.cache_creation_input_tokens ?? 0,
+  };
+  parsed._processingTimeMs = processingTimeMs;
+  parsed._wasCacheHit = false;
 
   return parsed;
 }
