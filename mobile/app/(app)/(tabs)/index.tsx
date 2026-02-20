@@ -22,6 +22,8 @@ import {
   useImportYouTubeSubscriptions,
 } from '@/src/hooks/useSummary';
 import { useEditorsPicks, useEditorsPickIds } from '@/src/hooks/useEditorsPicks';
+import { useCollections } from '@/src/hooks/useCollections';
+import { CollectionCard } from '@/src/components/collections/CollectionCard';
 import { usePreferences, useOnboardingStatus } from '@/src/hooks/usePreferences';
 import { useDueCards } from '@/src/hooks/useSpacedRepetition';
 import { useToast } from '@/src/components/ui/Toast';
@@ -63,6 +65,7 @@ export default function HomeScreen() {
 
   const { data: trendingVideos, isLoading: isTrendingLoading } = useTrendingVideos();
   const { data: editorsPicks } = useEditorsPicks();
+  const { data: collections } = useCollections();
   const { data: editorsPickIds } = useEditorsPickIds();
   const editorsPickSet = useMemo(
     () => new Set(editorsPickIds ?? []),
@@ -357,7 +360,31 @@ export default function HomeScreen() {
         </View>
       )}
 
-      {/* 3. From the community carousel */}
+      {/* 3. Collections carousel */}
+      {(collections ?? []).length > 0 && (
+        <View style={styles.section}>
+          <Pressable
+            style={styles.sectionTitleRow}
+            onPress={() => {/* TODO: See all collections screen */}}
+            accessibilityLabel="Browse collections"
+            accessibilityRole="button">
+            <Text style={styles.sectionTitleInline}>Collections</Text>
+            <Ionicons name="chevron-forward" size={20} color={Colors.textSecondary} />
+          </Pressable>
+          <FlatList
+            data={(collections ?? []).slice(0, 6)}
+            keyExtractor={(item) => item.id}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.carouselContent}
+            renderItem={({ item }) => (
+              <CollectionCard collection={item} width={CAROUSEL_CARD_WIDTH} />
+            )}
+          />
+        </View>
+      )}
+
+      {/* 4. From the community carousel */}
       {topCommunity.length > 0 && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>From the community</Text>

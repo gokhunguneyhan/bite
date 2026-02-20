@@ -27,6 +27,8 @@ import { FEATURED_CREATORS } from '@/src/constants/featuredCreators';
 import { useChannelInfo } from '@/src/hooks/useChannelInfo';
 import { CATEGORIES } from '@/src/types/summary';
 import { VerticalVideoCard } from '@/src/components/summary/VerticalVideoCard';
+import { CollectionCard } from '@/src/components/collections/CollectionCard';
+import { useCollections } from '@/src/hooks/useCollections';
 import type { Summary } from '@/src/types/summary';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
@@ -90,6 +92,7 @@ export default function ExploreScreen() {
   const subscribeMutation = useSubscribe();
   const unsubscribeMutation = useUnsubscribe();
   const { data: categoryVideos, isLoading: isLoadingVideos } = useCategoryVideos(selectedChip);
+  const { data: collections } = useCollections();
 
   const followedChannels = useMemo(
     () => new Set(subscriptions?.map((s) => s.channelName.toLowerCase()) ?? []),
@@ -411,7 +414,21 @@ export default function ExploreScreen() {
               </View>
             )}
 
-            {/* 2. Latest videos in grid style */}
+            {/* 2. Collections */}
+            {(collections ?? []).length > 0 && (
+              <>
+                <Text style={styles.sectionTitle}>Collections</Text>
+                <View style={styles.collectionsGrid}>
+                  {(collections ?? []).map((col) => (
+                    <View key={col.id} style={styles.collectionGridItem}>
+                      <CollectionCard collection={col} />
+                    </View>
+                  ))}
+                </View>
+              </>
+            )}
+
+            {/* 3. Latest videos in grid style */}
             {isLoadingVideos && (
               <ActivityIndicator color={Colors.primary} style={styles.videoLoader} />
             )}
@@ -715,6 +732,16 @@ const styles = StyleSheet.create({
   },
   followButtonTextActive: {
     color: Colors.primary,
+  },
+  // Collections grid
+  collectionsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 8,
+  },
+  collectionGridItem: {
+    width: (SCREEN_WIDTH - 24 * 2 - 12) / 2,
   },
   // Video grid
   videoGrid: {

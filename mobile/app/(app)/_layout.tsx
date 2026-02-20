@@ -95,6 +95,10 @@ export default function AppLayout() {
             name="editors-picks"
             options={{ title: "Editor's Picks", headerBackTitle: 'Back' }}
           />
+          <Stack.Screen
+            name="collection/[id]"
+            options={{ title: 'Collection', headerBackTitle: 'Back' }}
+          />
         </Stack>
         <Toast />
       </View>
