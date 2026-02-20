@@ -18,7 +18,7 @@ import {
   useSubscribe,
   useUnsubscribe,
 } from '@/src/hooks/useSummary';
-import { SummaryCard } from '@/src/components/summary/SummaryCard';
+import { VerticalVideoCard } from '@/src/components/summary/VerticalVideoCard';
 import { useChannelInfo } from '@/src/hooks/useChannelInfo';
 import { getChannelLatestVideos } from '@/src/services/youtubeImportService';
 import type { YouTubeVideo } from '@/src/mocks/youtubeSubscriptions';
@@ -178,7 +178,7 @@ export default function CreatorScreen() {
       style={styles.container}
       data={summaries}
       keyExtractor={(item) => item.id}
-      renderItem={({ item }) => <SummaryCard summary={item} />}
+      renderItem={({ item }) => <VerticalVideoCard summary={item} />}
       contentContainerStyle={styles.listContent}
       ListHeaderComponent={header}
       ListEmptyComponent={

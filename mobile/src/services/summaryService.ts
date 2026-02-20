@@ -167,13 +167,9 @@ export async function deleteSummary(id: string): Promise<void> {
 }
 
 export async function fetchSummariesByChannel(channelName: string): Promise<Summary[]> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return [];
-
   const { data, error } = await supabase
     .from('summaries')
     .select('*')
-    .eq('user_id', session.user.id)
     .eq('channel_name', channelName)
     .order('created_at', { ascending: false });
 
